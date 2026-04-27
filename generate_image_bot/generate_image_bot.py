@@ -32,6 +32,9 @@ _MESSAGE_KEYS = (
 )
 _MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB: Discord の添付ファイル上限に合わせた閾値
 
+# Discord ボット経由でユーザー入力を受け取るため、巨大文字列によるメモリ枯渇を防ぐ上限
+MAX_PROMPT_LENGTH = 3000
+
 # ── ログ出力 ──────────────────────────────────────────────────────────────────
 
 
@@ -242,18 +245,21 @@ class GenImageModal(discord.ui.Modal, title="画像生成"):
         label="LoRAs",
         required=False,
         placeholder="lora1, lora2",
+        max_length=400,
     )
     positive = discord.ui.TextInput(
         label="Positive",
         style=discord.TextStyle.paragraph,
         required=True,
         placeholder="masterpiece, best quality, 1girl",
+        max_length=MAX_PROMPT_LENGTH,
     )
     negative = discord.ui.TextInput(
         label="Negative",
         style=discord.TextStyle.paragraph,
         required=True,
         placeholder="worst quality, bad quality",
+        max_length=MAX_PROMPT_LENGTH,
     )
 
     def __init__(self, bot: "ImageBot"):
