@@ -223,5 +223,6 @@ generate_image_bot/config.json
 # other files
 _*.json
 _*.txt
+_*.md
 result_*.json
 log/

@@ -504,35 +504,69 @@ class TestImageBotHandleRequest:
         asyncio.run(bot._handle_request(msg))
         assert bot._limiter.is_generating() is False
 
+    def test_sends_without_reference_when_message_deleted(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        msg = make_message(bot.user, VALID_CONTENT)
+        # 参照ありの send で HTTPException、フォールバックの send は成功
+        msg.channel.send = AsyncMock(
+            side_effect=[discord.HTTPException(MagicMock(), "Unknown Message"), None]
+        )
+        with patch("generate_image_bot.discord.File") as mock_file:
+            asyncio.run(bot._handle_request(msg))
+        assert msg.channel.send.call_count == 2
+        last_kwargs = msg.channel.send.call_args.kwargs
+        assert "reference" not in last_kwargs
+        # HTTPException 後にファイルが閉じられるため discord.File が2回生成されること
+        assert mock_file.call_count == 2
 
-# ── ImageBot: _resolve_files ──────────────────────────────────────────────────
+    def test_success_reaction_skipped_when_message_deleted(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        msg = make_message(bot.user, VALID_CONTENT)
+
+        async def add_reaction_side_effect(reaction):
+            if reaction == "✅":
+                raise discord.HTTPException(MagicMock(), "Unknown Message")
+
+        msg.add_reaction.side_effect = add_reaction_side_effect
+        with patch("generate_image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        # 例外が伝播せず、生成ロックが解除されていること
+        assert bot._limiter.is_generating() is False
 
 
-class TestResolveFiles:
+# ── ImageBot: _resolve_output_paths ──────────────────────────────────────────
+
+
+class TestResolveOutputPaths:
     def _make_bot(self, tmp_path) -> ImageBot:
         return make_bot_for_test(valid_config(), MagicMock(), tmp_path)
 
-    def test_valid_file_returns_discord_file(self, tmp_path):
+    def test_valid_file_returns_path(self, tmp_path):
         bot = self._make_bot(tmp_path)
         (tmp_path / "output.png").write_bytes(b"x")
-        with patch("generate_image_bot.discord.File") as mock_file:
-            files = bot._resolve_files(
-                [{"filename": "output.png", "subfolder": "", "type": "output"}]
-            )
-        assert len(files) == 1
-        mock_file.assert_called_once_with(str((tmp_path / "output.png").resolve()))
+        paths = bot._resolve_output_paths(
+            [{"filename": "output.png", "subfolder": "", "type": "output"}]
+        )
+        assert len(paths) == 1
+        assert paths[0] == (tmp_path / "output.png").resolve()
 
     def test_path_traversal_raises(self, tmp_path):
         bot = self._make_bot(tmp_path)
         with pytest.raises(ValueError, match="不正"):
-            bot._resolve_files(
+            bot._resolve_output_paths(
                 [{"filename": "../evil.png", "subfolder": "", "type": "output"}]
             )
 
     def test_file_not_found_raises(self, tmp_path):
         bot = self._make_bot(tmp_path)
         with pytest.raises(ValueError, match="見つかりません"):
-            bot._resolve_files(
+            bot._resolve_output_paths(
                 [{"filename": "nonexistent.png", "subfolder": "", "type": "output"}]
             )
 
@@ -542,17 +576,17 @@ class TestResolveFiles:
         with patch.object(Path, "stat") as mock_stat:
             mock_stat.return_value.st_size = 10 * 1024 * 1024
             with pytest.raises(ValueError, match="大きすぎます"):
-                bot._resolve_files(
+                bot._resolve_output_paths(
                     [{"filename": "big.png", "subfolder": "", "type": "output"}]
                 )
 
     def test_non_output_type_is_skipped(self, tmp_path):
         bot = self._make_bot(tmp_path)
         (tmp_path / "temp.png").write_bytes(b"x")
-        files = bot._resolve_files(
+        paths = bot._resolve_output_paths(
             [{"filename": "temp.png", "subfolder": "", "type": "temp"}]
         )
-        assert files == []
+        assert paths == []
 
     def test_mixed_types_only_output_returned(self, tmp_path):
         bot = self._make_bot(tmp_path)
@@ -562,10 +596,9 @@ class TestResolveFiles:
             {"filename": "tmp.png", "subfolder": "", "type": "temp"},
             {"filename": "out.png", "subfolder": "", "type": "output"},
         ]
-        with patch("generate_image_bot.discord.File") as mock_file:
-            files = bot._resolve_files(items)
-        assert len(files) == 1
-        mock_file.assert_called_once_with(str((tmp_path / "out.png").resolve()))
+        paths = bot._resolve_output_paths(items)
+        assert len(paths) == 1
+        assert paths[0] == (tmp_path / "out.png").resolve()
 
 
 # ── write_log ─────────────────────────────────────────────────────────────────

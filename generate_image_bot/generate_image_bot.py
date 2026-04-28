@@ -444,9 +444,9 @@ class ImageBot(discord.Client):
             await self._reply_error(message, self._fmt("unexpected_error"))
             return
 
-        # 出力ファイルの存在・パス・サイズを検証してから discord.File を生成する
+        # 出力ファイルの存在・パス・サイズを検証する
         try:
-            files = self._resolve_files(outputs)
+            file_paths = self._resolve_output_paths(outputs)
         except ValueError as e:
             write_log(
                 self._log_dir, user_id, username, parsed, "error", outputs, str(e)
@@ -455,12 +455,24 @@ class ImageBot(discord.Client):
             return
 
         write_log(self._log_dir, user_id, username, parsed, "success", outputs, None)
-        await message.channel.send(files=files, reference=message)
-        await message.add_reaction(self._config["reactions"]["success"])
+        try:
+            await message.channel.send(
+                files=[discord.File(str(p)) for p in file_paths], reference=message
+            )
+        except discord.HTTPException:
+            # 参照先メッセージが削除された場合は参照なしで投稿する
+            # HTTPException 後に discord.File が閉じられるため再生成する
+            await message.channel.send(
+                files=[discord.File(str(p)) for p in file_paths]
+            )
+        try:
+            await message.add_reaction(self._config["reactions"]["success"])
+        except discord.HTTPException:
+            pass
 
-    def _resolve_files(self, outputs: list) -> list:
-        """outputs リストから type が output のファイルを検証し discord.File のリストを返す。"""
-        files = []
+    def _resolve_output_paths(self, outputs: list) -> list:
+        """outputs リストから type が output のファイルを検証し Path のリストを返す。"""
+        paths = []
         for item in outputs:
             # type が output 以外（temp 等）はスキップする
             if item.get("type") != "output":
@@ -477,8 +489,8 @@ class ImageBot(discord.Client):
             if size >= _MAX_FILE_SIZE:
                 size_mb = size / (1024 * 1024)
                 raise ValueError(self._fmt("file_too_large", size_mb=f"{size_mb:.1f}"))
-            files.append(discord.File(str(path)))
-        return files
+            paths.append(path)
+        return paths
 
     async def _reply_error(self, message: discord.Message, text: str):
         """エラーリアクションを付与してメッセージに返信する。"""
