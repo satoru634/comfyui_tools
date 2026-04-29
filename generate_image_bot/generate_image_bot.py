@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import aiohttp
 import discord
 
 # run_workflow は同リポジトリの兄弟ディレクトリにあるためパスを追加する
@@ -462,9 +463,7 @@ class ImageBot(discord.Client):
         except discord.HTTPException:
             # 参照先メッセージが削除された場合は参照なしで投稿する
             # HTTPException 後に discord.File が閉じられるため再生成する
-            await message.channel.send(
-                files=[discord.File(str(p)) for p in file_paths]
-            )
+            await message.channel.send(files=[discord.File(str(p)) for p in file_paths])
         try:
             await message.add_reaction(self._config["reactions"]["success"])
         except discord.HTTPException:
@@ -506,8 +505,12 @@ class ImageBot(discord.Client):
 # ── エントリポイント ──────────────────────────────────────────────────────────
 
 
+_RECONNECT_WAIT = 30  # WSServerHandshakeError 発生時の再接続待機秒数
+
+
 def main():
-    """コマンドライン引数を解析して設定を読み込み、ボットを起動する。"""
+    """コマンドライン引数を解析して設定を読み込み、ボットを起動する。
+    Discord ゲートウェイへの WebSocket ハンドシェイクが失敗した場合は待機後に再起動する。"""
     parser = argparse.ArgumentParser(description="ComfyUI Discord ボット")
     parser.add_argument(
         "-c",
@@ -517,7 +520,17 @@ def main():
     )
     args = parser.parse_args()
     config = load_config(args.config)
-    ImageBot(config).run(config["discord_token"])
+    while True:
+        try:
+            ImageBot(config).run(config["discord_token"])
+            break  # shutdown_watcher による正常終了
+        except aiohttp.WSServerHandshakeError as e:
+            # Discord ゲートウェイが HTTP 520 等を返した場合は待機後に再接続する
+            print(
+                f"WebSocket ハンドシェイクエラー ({e}), "
+                f"{_RECONNECT_WAIT}秒後に再接続します..."
+            )
+            time.sleep(_RECONNECT_WAIT)
 
 
 if __name__ == "__main__":
