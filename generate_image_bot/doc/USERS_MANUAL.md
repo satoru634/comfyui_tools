@@ -10,6 +10,7 @@ Discord のチャットから AI による画像生成をリクエストでき�
 
 - プロンプト（「描きたい要素」の英単語をカンマ区切りで並べたもの）を入力できる
 - LoRA（画風・キャラクターなどの追加モデル）を最大 4 個まで組み合わせられる
+- 画像の向き（縦 / 横）を指定できる
 - 処理状況はリアクション絵文字でリアルタイムに確認できる
 
 ### 操作方法は 2 種類
@@ -39,6 +40,7 @@ negative: 除外したい要素（何を描いてほしくないか）
 | `loras:` | いいえ | 使用する LoRA 名をカンマ区切りで指定（最大 4 個） |
 | `positive:` | **はい** | 画像に含めたい要素 |
 | `negative:` | **はい** | 画像から除外したい要素 |
+| `image_orientation:` | いいえ | 画像の向き（`vertical` または `horizontal`。省略時は既定サイズで生成） |
 
 ### 記入例
 
@@ -56,6 +58,22 @@ loras: my_style, my_character
 positive: masterpiece, best quality, 1girl,
   (detailed face:1.3), solo
 negative: worst quality, bad quality, blurry
+```
+
+**縦向き（vertical）で生成する場合**
+```
+@ボット名
+positive: masterpiece, best quality, 1girl, solo
+negative: worst quality, bad quality, blurry
+image_orientation: vertical
+```
+
+**横向き（horizontal）で生成する場合**
+```
+@ボット名
+positive: masterpiece, best quality, landscape
+negative: worst quality, bad quality, blurry
+image_orientation: horizontal
 ```
 
 ### プロンプトの複数行記入
@@ -87,6 +105,7 @@ negative: worst quality,
 | LoRAs | いいえ | 使用する LoRA 名をカンマ区切りで入力（最大 4 個） |
 | Positive | **はい** | 画像に含めたい要素 |
 | Negative | **はい** | 画像から除外したい要素 |
+| Image Orientation | いいえ | 画像の向き（`vertical` または `horizontal`。省略時は既定サイズで生成） |
 
 ### 操作の流れ
 
@@ -150,6 +169,14 @@ negative: worst quality,
 **対処法：** ⏳ リアクションが付いているメッセージの処理が終わるまでお待ちください。
 
 処理が完了したら（⏳ が消えたら）、改めてリクエストしてください。
+
+---
+
+### ❌ メッセージの形式が正しくありません: image_orientation には 'vertical' または 'horizontal' を指定してください
+
+**こんなとき：** `image_orientation:` に `vertical` / `horizontal` 以外の値を指定した場合
+
+**対処法：** `vertical`（縦向き）または `horizontal`（横向き）のどちらかを正確に入力してください。大文字・小文字は問いません。
 
 ---
 

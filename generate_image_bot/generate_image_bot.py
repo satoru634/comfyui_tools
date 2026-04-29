@@ -61,6 +61,7 @@ def write_log(
         "loras": parsed.get("loras", []),
         "positive": parsed.get("positive", ""),
         "negative": parsed.get("negative", ""),
+        "image_orientation": parsed.get("image_orientation"),
         "outputs": outputs,
         "error": error,
     }
@@ -81,6 +82,29 @@ def _parse_shutdown_time(value: str) -> tuple[int, int]:
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
         raise ValueError(f"'shutdown_time' の時刻が不正です: {value!r}")
     return hour, minute
+
+
+_VALID_ORIENTATIONS = ("vertical", "horizontal")
+
+
+def _validate_image_size_entry(entry: dict, key: str) -> None:
+    """image_size.vertical / image_size.horizontal の各エントリを検証する。"""
+    if not isinstance(entry, dict):
+        raise ValueError(f"'image_size.{key}' はオブジェクト形式である必要があります")
+    for dim in ("width", "height"):
+        if dim not in entry:
+            raise ValueError(f"'image_size.{key}' に '{dim}' キーがありません")
+        val = entry[dim]
+        if isinstance(val, bool) or not isinstance(val, int):
+            raise ValueError(f"'image_size.{key}.{dim}' は整数である必要があります")
+        if not (512 <= val <= 2048):
+            raise ValueError(
+                f"'image_size.{key}.{dim}' は 512〜2048 の範囲で指定してください（指定値: {val}）"
+            )
+        if val % 8 != 0:
+            raise ValueError(
+                f"'image_size.{key}.{dim}' は 8 の倍数である必要があります（指定値: {val}）"
+            )
 
 
 def _validate_reactions(reactions: dict) -> None:
@@ -129,6 +153,20 @@ def load_config(config_path: str) -> dict:
         if not isinstance(data[key], str) or not data[key].strip():
             raise ValueError(f"'{key}' は空でない文字列である必要があります")
 
+    if "image_size" not in data:
+        raise ValueError("config.json に 'image_size' キーがありません")
+    image_size = data["image_size"]
+    if not isinstance(image_size, dict):
+        raise ValueError(
+            "config.json の 'image_size' はオブジェクト形式である必要があります"
+        )
+    for orientation in _VALID_ORIENTATIONS:
+        if orientation not in image_size:
+            raise ValueError(
+                f"config.json の 'image_size' に '{orientation}' キーがありません"
+            )
+        _validate_image_size_entry(image_size[orientation], orientation)
+
     if "reactions" not in data:
         raise ValueError("config.json に 'reactions' キーがありません")
     _validate_reactions(data["reactions"])
@@ -155,19 +193,31 @@ def load_config(config_path: str) -> dict:
 class MessageParser:
     # メンション除去用と行頭キーワード検出用の正規表現
     _MENTION = re.compile(r"<@!?\d+>")
-    _KEYWORD = re.compile(r"^(loras|positive|negative)\s*:", re.IGNORECASE)
+    _KEYWORD = re.compile(
+        r"^(loras|positive|negative|image_orientation)\s*:", re.IGNORECASE
+    )
 
     def parse(self, text: str) -> dict:
-        """メンションメッセージをパースして loras / positive / negative を返す。
+        """メンションメッセージをパースして loras / positive / negative / image_orientation を返す。
         positive / negative が欠落している場合は ValueError を送出する。"""
         cleaned = self._MENTION.sub("", text)
         sections = self._collect_sections(cleaned)
         self._validate_required(sections)
-        return {
+        result = {
             "loras": self._parse_loras(sections.get("loras", "")),
             "positive": sections["positive"],
             "negative": sections["negative"],
+            "image_orientation": None,
         }
+        if "image_orientation" in sections:
+            orientation = sections["image_orientation"].lower()
+            if orientation not in _VALID_ORIENTATIONS:
+                raise ValueError(
+                    f"'image_orientation' は 'vertical' または 'horizontal' で指定してください"
+                    f"（指定値: {sections['image_orientation']!r}）"
+                )
+            result["image_orientation"] = orientation
+        return result
 
     def _collect_sections(self, text: str) -> dict:
         """テキストを行ごとに走査し、キーワード行で区切られたセクションを収集する。
@@ -262,6 +312,12 @@ class GenImageModal(discord.ui.Modal, title="画像生成"):
         placeholder="worst quality, bad quality",
         max_length=MAX_PROMPT_LENGTH,
     )
+    image_orientation = discord.ui.TextInput(
+        label="画像の向き (vertical / horizontal)",
+        required=False,
+        placeholder="vertical",
+        max_length=10,
+    )
 
     def __init__(self, bot: "ImageBot"):
         super().__init__()
@@ -275,10 +331,18 @@ class GenImageModal(discord.ui.Modal, title="画像生成"):
 
     def _build_parsed(self) -> dict:
         loras_str = self.loras.value.strip()
+        orientation_raw = self.image_orientation.value.strip()
+        orientation = orientation_raw.lower() if orientation_raw else None
+        if orientation is not None and orientation not in _VALID_ORIENTATIONS:
+            raise ValueError(
+                f"'image_orientation' は 'vertical' または 'horizontal' で指定してください"
+                f"（指定値: {orientation_raw!r}）"
+            )
         return {
             "loras": [n.strip() for n in loras_str.split(",") if n.strip()],
             "positive": self.positive.value.strip(),
             "negative": self.negative.value.strip(),
+            "image_orientation": orientation,
         }
 
     def _build_message_text(self, parsed: dict) -> str:
@@ -287,6 +351,8 @@ class GenImageModal(discord.ui.Modal, title="画像生成"):
             lines.append(f"loras: {', '.join(parsed['loras'])}")
         lines.append(f"positive: {parsed['positive']}")
         lines.append(f"negative: {parsed['negative']}")
+        if parsed.get("image_orientation"):
+            lines.append(f"image_orientation: {parsed['image_orientation']}")
         return "\n".join(lines)
 
 
@@ -429,10 +495,14 @@ class ImageBot(discord.Client):
         user_id = user.id
         username = user.name
 
+        # image_orientation が指定されている場合は config の image_size から対応サイズを取得する
+        orientation = parsed.get("image_orientation")
+        image_size = self._config["image_size"][orientation] if orientation else None
+
         # WorkflowRunner.execute() は同期処理のため to_thread でイベントループをブロックしない
         try:
             outputs = await asyncio.to_thread(
-                self._runner.execute, parsed["loras"], prompts
+                self._runner.execute, parsed["loras"], prompts, image_size
             )
         except ValueError as e:
             # LoRA 名やプロンプトの検証エラー等、想定内の失敗

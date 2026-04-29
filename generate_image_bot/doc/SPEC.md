@@ -39,6 +39,10 @@ comfyui_tools/
   "comfyui_output_dir": "C:/path/to/ComfyUI/output",
   "run_workflow_config": "../run_workflow/config.json",
   "shutdown_time": "03:00",
+  "image_size": {
+    "vertical": {"width": 832, "height": 1216},
+    "horizontal": {"width": 1216, "height": 832}
+  },
   "reactions": {
     "processing": "⏳",
     "success": "✅",
@@ -63,8 +67,22 @@ comfyui_tools/
 | `comfyui_output_dir` | ComfyUI の output フォルダへの絶対パス |
 | `run_workflow_config` | `run_workflow/config.json` へのパス（相対 or 絶対） |
 | `shutdown_time` | ボットを停止する時刻（後述）。省略または `null` で停止なし |
+| `image_size` | 画像の向きごとの生成サイズ（後述） |
 | `reactions` | ボットが付けるリアクション絵文字（後述） |
 | `messages` | ボットが返信するメッセージのテンプレート（後述） |
+
+### image_size
+
+`image_orientation` の値に応じて使用する画像サイズを定義する。
+
+| キー | 説明 |
+|---|---|
+| `vertical` | 縦向き（`image_orientation: vertical`）のときに使用するサイズ |
+| `horizontal` | 横向き（`image_orientation: horizontal`）のときに使用するサイズ |
+
+- 各値は `{"width": <整数>, "height": <整数>}` の形式で記述する。
+- バリデーションルールは `run_workflow` の `image_size` と同一（512〜2048 の整数、8 の倍数）。
+- `image_orientation` が省略された場合、`image_size` は `run_workflow/config.json` の `default_image_size` が使用される（このボット側の `image_size` は参照しない）。
 
 ### shutdown_time
 
@@ -125,10 +143,13 @@ positive: masterpiece, best quality, 1girl,
   (detailed face:1.3), solo
 negative: worst quality, bad quality,
   blurry
+image_orientation: vertical
 ```
 
 - `loras:` 行は省略可能（省略時は LoRA なしで実行）
 - `positive:` / `negative:` は必須
+- `image_orientation:` 行は省略可能（省略時は `run_workflow/config.json` の `default_image_size` を使用）
+- `image_orientation:` の値は `vertical`（縦）または `horizontal`（横）のみ受け付ける
 - 各キーワードは **行頭** に置く（`キーワード:` の形式）
 - プロンプトは複数行にわたって記述できる（次のキーワード行が来るまで継続）
 
@@ -136,7 +157,7 @@ negative: worst quality, bad quality,
 
 1. メッセージ本文からメンション部分（`<@...>`）を除去する
 2. 残りのテキストを行単位に分割する
-3. 行が `loras:` / `positive:` / `negative:` のいずれかで始まる場合、そのキーワードの値収集を開始する
+3. 行が `loras:` / `positive:` / `negative:` / `image_orientation:` のいずれかで始まる場合、そのキーワードの値収集を開始する
 4. それ以外の行は、直前のキーワードの値に改行付きで追記する（継続行）
 5. 収集した各値は前後の空白・改行をトリム（`strip()`）する
 
@@ -158,6 +179,7 @@ positive: masterpiece, (detailed face:1.3), (eyes:1.2)
 | 検証内容 | ボット側 |
 |---|---|
 | フォーマットのパース失敗（必須キーの欠落等） | ボット側で検出しエラーメッセージ返信 |
+| `image_orientation` の値が `vertical` / `horizontal` 以外 | ボット側で検出しエラーメッセージ返信 |
 | LoRA 名・プロンプトの内容検証 | `WorkflowRunner.execute()` に委譲 |
 
 ---
@@ -179,21 +201,23 @@ DM からのコマンドは無視する（リアクション・返信なし）�
 | `loras` | LoRAs | 1行テキスト | 省略可 |
 | `positive` | Positive | 複数行テキスト | 必須 |
 | `negative` | Negative | 複数行テキスト | 必須 |
+| `image_orientation` | Image Orientation (vertical / horizontal) | 1行テキスト | 省略可 |
 
 #### モーダル送信後の動作
 
-1. 入力値からキーワード形式のメッセージを生成してチャンネルに送信する（`loras` が空の場合は `loras:` 行を省略）
+1. 入力値からキーワード形式のメッセージを生成してチャンネルに送信する（`loras` が空の場合は `loras:` 行を省略、`image_orientation` が空の場合は `image_orientation:` 行を省略）
 2. 送信されたメッセージを起点として、メンションメッセージと同じ生成フローを実行する
 
-**返信メッセージの例（loras あり）**
+**返信メッセージの例（loras あり、image_orientation あり）**
 
 ```
 loras: my_lora, another_lora
 positive: masterpiece, best quality, 1girl
 negative: worst quality, bad quality
+image_orientation: vertical
 ```
 
-**返信メッセージの例（loras なし）**
+**返信メッセージの例（loras なし、image_orientation なし）**
 
 ```
 positive: masterpiece, best quality, 1girl
@@ -203,6 +227,7 @@ negative: worst quality, bad quality
 #### 入力バリデーション
 
 モーダル経由では `MessageParser` を経由せず入力値を直接 `parsed` に組み立てるため、パースエラーは発生しない。
+`image_orientation` の値チェック（`vertical` / `horizontal` 以外は弾く）はボット側で行う。
 LoRA 名・プロンプトの内容検証は `WorkflowRunner.execute()` に委譲する（メンションメッセージと同様）。
 
 ## レート制限・生成ロック
@@ -232,12 +257,12 @@ LoRA 名・プロンプトの内容検証は `WorkflowRunner.execute()` に委�
 2. 自分自身のメッセージには反応しない
 3. DM（`message.guild is None`）の場合は無視する（リアクション・返信なし）
 4. シャットダウン要求中の場合は無視する（リアクション・返信なし）
-5. メッセージ本文をパースし、`loras` / `positive` / `negative` を取り出す
+5. メッセージ本文をパースし、`loras` / `positive` / `negative` / `image_orientation` を取り出す
 6. パース失敗時はエラーリアクション（`❌`）を付けてエラーメッセージを返信し、処理を中断する
 7. レート制限チェックを行い、制限中であればエラーリアクション（`❌`）を付けて返信し、処理を中断する
 8. グローバルロックチェックを行い、生成中であればエラーリアクション（`❌`）を付けて返信し、処理を中断する
 9. グローバルロックをセットし、処理中リアクション（`⏳`）をメッセージに付ける
-10. `WorkflowRunner.execute(loras, prompts)` を呼び出す（`asyncio.to_thread()` でラップ）
+10. `image_orientation` が指定されている場合は `config.json` の `image_size[image_orientation]` を取得し、`WorkflowRunner.execute(loras, prompts, image_size=...)` を呼び出す。省略時は `image_size=None` を渡す（`asyncio.to_thread()` でラップ）
 11. 成功時: `comfyui_output_dir` から出力画像ファイルを読み込む。各ファイルについて `Path.resolve()` で正規化したパスが `comfyui_output_dir` 配下に収まることを確認し、サイズが 10MB 未満であることを確認してから Discord に送信し、完了リアクション（`✅`）を付ける
 12. エラー時: エラーリアクション（`❌`）を付けてエラーメッセージを返信する
 13. 処理完了後（成功・エラー問わず）、グローバルロックを解除し、処理中リアクション（`⏳`）を削除する
@@ -249,7 +274,7 @@ LoRA 名・プロンプトの内容検証は `WorkflowRunner.execute()` に委�
 3. シャットダウン要求中の場合は ephemeral メッセージで通知し、処理を中断する
 4. `interaction.response.send_modal(GenImageModal(...))` でモーダルを表示する
 5. ユーザーが入力して送信すると `GenImageModal.on_submit` が呼ばれる
-6. モーダルの入力値から `parsed`（`loras` / `positive` / `negative`）を直接組み立てる
+6. モーダルの入力値から `parsed`（`loras` / `positive` / `negative` / `image_orientation`）を直接組み立てる
 7. キーワード形式のメッセージを `interaction.response.send_message()` でチャンネルに送信する
 8. `interaction.original_response()` で送信されたメッセージオブジェクトを取得する
 9. 以降はメンションメッセージ経由のステップ 7〜13 と同じ（`message` の代わりに取得したメッセージオブジェクトを使用）
@@ -311,6 +336,7 @@ generate_image_bot/log/result_YYYYMMDD_hhmmss.json
   "loras": ["lora1"],
   "positive": "masterpiece, 1girl",
   "negative": "worst quality",
+  "image_orientation": "vertical",
   "outputs": [{"filename": "output.png", "subfolder": "", "type": "output"}],
   "error": null
 }
@@ -325,6 +351,7 @@ generate_image_bot/log/result_YYYYMMDD_hhmmss.json
 | `loras` | array | 使用 LoRA 名のリスト |
 | `positive` | string | ポジティブプロンプト |
 | `negative` | string | ネガティブプロンプト |
+| `image_orientation` | string \| null | 画像の向き（`"vertical"` / `"horizontal"` / `null`。省略時は null） |
 | `outputs` | array | `WorkflowRunner.execute()` の戻り値（エラー時は空配列またはエラー前の出力） |
 | `error` | string \| null | エラーメッセージ（成功時は null） |
 
@@ -337,6 +364,7 @@ generate_image_bot/log/result_YYYYMMDD_hhmmss.json
 | シャットダウン要求中のメンションメッセージ | 無視する（リアクション・返信なし） |
 | シャットダウン要求中のスラッシュコマンド | ephemeral でシャットダウン中を通知する |
 | フォーマット不正（必須キー欠落 等） | `❌` + エラー内容を返信 |
+| `image_orientation` の値が `vertical` / `horizontal` 以外 | `❌` + エラー内容を返信 |
 | レート制限（30秒以内の再リクエスト） | `❌` + 残り待機秒数を返信 |
 | グローバルロック中（生成中） | `❌` + 生成中メッセージを返信 |
 | `WorkflowRunner.execute()` が ValueError | `❌` + エラー内容を返信 |
@@ -351,7 +379,7 @@ generate_image_bot/log/result_YYYYMMDD_hhmmss.json
 
 | クラス | 責務 |
 |---|---|
-| `MessageParser` | メンションメッセージのテキストをパースし `loras` / `prompts` を取り出す |
+| `MessageParser` | メンションメッセージのテキストをパースし `loras` / `prompts` / `image_orientation` を取り出す |
 | `RateLimiter` | ユーザーごとのクールダウンとグローバル生成ロックを管理し、リクエストの受付可否を判定する |
 | `GenImageModal` | `discord.ui.Modal` を継承し、`/gen_image` コマンドで表示するモーダルのフィールド定義と `on_submit` 処理を担当する |
 | `ImageBot` | `discord.Client` を継承し、`on_message`・スラッシュコマンドのイベントを処理するメインクラス。停止時刻のウォッチャータスクも管理する |
@@ -409,6 +437,7 @@ python generate_image_bot.py --config /path/to/config.json
           positive: masterpiece, best quality, 1girl,
             (detailed face:1.3), solo
           negative: worst quality, bad quality, blurry
+          image_orientation: vertical
 
 ボット:   [⏳ リアクション付与]
           ...（生成中）...
@@ -433,15 +462,17 @@ python generate_image_bot.py --config /path/to/config.json
 ユーザー: /gen_image
           → GenImageModal が表示される
 
-          [LoRAs]    my_lora, another_lora
-          [Positive] masterpiece, best quality, 1girl
-          [Negative] worst quality, bad quality
+          [LoRAs]              my_lora, another_lora
+          [Positive]           masterpiece, best quality, 1girl
+          [Negative]           worst quality, bad quality
+          [Image Orientation]  vertical
 
           → 送信ボタンを押す
 
 ボット:   loras: my_lora, another_lora
           positive: masterpiece, best quality, 1girl
           negative: worst quality, bad quality
+          image_orientation: vertical
           [⏳ リアクション付与]
           ...（生成中）...
           [画像ファイルを添付して返信]

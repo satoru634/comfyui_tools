@@ -20,6 +20,7 @@ from generate_image_bot import (
     write_log,
     _parse_shutdown_time,
     _RECONNECT_WAIT,
+    _VALID_ORIENTATIONS,
 )
 
 
@@ -31,6 +32,10 @@ def valid_config() -> dict:
         "discord_token": "test_token",
         "comfyui_output_dir": "C:/output",
         "run_workflow_config": "../run_workflow/config.json",
+        "image_size": {
+            "vertical": {"width": 832, "height": 1216},
+            "horizontal": {"width": 1216, "height": 832},
+        },
         "reactions": {
             "processing": "⏳",
             "success": "✅",
@@ -299,6 +304,33 @@ class TestMessageParser:
         assert result["positive"] == "1girl"
         assert result["negative"] == "bad"
 
+    def test_image_orientation_omitted_returns_none(self):
+        text = "<@123456>\npositive: 1girl\nnegative: bad"
+        result = self.parser.parse(text)
+        assert result["image_orientation"] is None
+
+    def test_image_orientation_vertical(self):
+        text = "<@123456>\npositive: 1girl\nnegative: bad\nimage_orientation: vertical"
+        result = self.parser.parse(text)
+        assert result["image_orientation"] == "vertical"
+
+    def test_image_orientation_horizontal(self):
+        text = (
+            "<@123456>\npositive: 1girl\nnegative: bad\nimage_orientation: horizontal"
+        )
+        result = self.parser.parse(text)
+        assert result["image_orientation"] == "horizontal"
+
+    def test_image_orientation_case_insensitive(self):
+        text = "<@123456>\npositive: 1girl\nnegative: bad\nimage_orientation: Vertical"
+        result = self.parser.parse(text)
+        assert result["image_orientation"] == "vertical"
+
+    def test_image_orientation_invalid_raises(self):
+        text = "<@123456>\npositive: 1girl\nnegative: bad\nimage_orientation: square"
+        with pytest.raises(ValueError, match="vertical.*horizontal"):
+            self.parser.parse(text)
+
 
 # ── RateLimiter ───────────────────────────────────────────────────────────────
 
@@ -429,7 +461,7 @@ class TestImageBotHandleRequest:
         with patch("generate_image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
         runner.execute.assert_called_once_with(
-            [], {"positive": "1girl", "negative": "bad quality"}
+            [], {"positive": "1girl", "negative": "bad quality"}, None
         )
 
     def test_valid_request_sends_file_to_channel(self, tmp_path):
@@ -524,6 +556,49 @@ class TestImageBotHandleRequest:
         assert "reference" not in last_kwargs
         # HTTPException 後にファイルが閉じられるため discord.File が2回生成されること
         assert mock_file.call_count == 2
+
+    def test_image_orientation_vertical_passes_correct_image_size(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        content = (
+            "<@1>\npositive: 1girl\nnegative: bad quality\nimage_orientation: vertical"
+        )
+        msg = make_message(bot.user, content)
+        with patch("generate_image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        runner.execute.assert_called_once_with(
+            [],
+            {"positive": "1girl", "negative": "bad quality"},
+            {"width": 832, "height": 1216},
+        )
+
+    def test_image_orientation_horizontal_passes_correct_image_size(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        content = "<@1>\npositive: 1girl\nnegative: bad quality\nimage_orientation: horizontal"
+        msg = make_message(bot.user, content)
+        with patch("generate_image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        runner.execute.assert_called_once_with(
+            [],
+            {"positive": "1girl", "negative": "bad quality"},
+            {"width": 1216, "height": 832},
+        )
+
+    def test_image_orientation_invalid_sends_error(self, tmp_path):
+        runner = MagicMock()
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        content = (
+            "<@1>\npositive: 1girl\nnegative: bad quality\nimage_orientation: square"
+        )
+        msg = make_message(bot.user, content)
+        asyncio.run(bot._handle_request(msg))
+        msg.add_reaction.assert_called_with("❌")
+        runner.execute.assert_not_called()
 
     def test_success_reaction_skipped_when_message_deleted(self, tmp_path):
         runner = MagicMock()
@@ -654,6 +729,19 @@ class TestWriteLog:
         data = json.loads(list(log_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
         assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", data["timestamp"])
 
+    def test_image_orientation_included_in_log(self, tmp_path):
+        log_dir = tmp_path / "log"
+        parsed = {**_LOG_PARSED, "image_orientation": "vertical"}
+        write_log(log_dir, 123, "user1", parsed, "success", [], None)
+        data = json.loads(list(log_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
+        assert data["image_orientation"] == "vertical"
+
+    def test_image_orientation_null_when_omitted(self, tmp_path):
+        log_dir = tmp_path / "log"
+        write_log(log_dir, 123, "user1", _LOG_PARSED, "success", [], None)
+        data = json.loads(list(log_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
+        assert data["image_orientation"] is None
+
 
 # ── ImageBot: ログ統合テスト ────────────────────────────────────────────────────
 
@@ -679,6 +767,33 @@ class TestImageBotLogging:
         assert data["status"] == "success"
         assert data["outputs"] == VALID_OUTPUTS
         assert data["error"] is None
+
+    def test_success_log_contains_image_orientation(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        log_dir = tmp_path / "log"
+        bot = self._make_bot_with_log(valid_config(), runner, tmp_path, log_dir)
+        content = (
+            "<@1>\npositive: 1girl\nnegative: bad quality\nimage_orientation: vertical"
+        )
+        msg = make_message(bot.user, content)
+        with patch("generate_image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        data = json.loads(list(log_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
+        assert data["image_orientation"] == "vertical"
+
+    def test_success_log_image_orientation_null_when_omitted(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        log_dir = tmp_path / "log"
+        bot = self._make_bot_with_log(valid_config(), runner, tmp_path, log_dir)
+        msg = make_message(bot.user, VALID_CONTENT)
+        with patch("generate_image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        data = json.loads(list(log_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
+        assert data["image_orientation"] is None
 
     def test_success_log_contains_user_info(self, tmp_path):
         runner = MagicMock()
@@ -810,6 +925,42 @@ class TestLoadConfigShutdownTime:
         with pytest.raises(ValueError, match="shutdown_time"):
             load_config(path)
 
+    def test_missing_image_size_key(self, tmp_path):
+        data = valid_config()
+        del data["image_size"]
+        path = write_config(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="'image_size' キーがありません"):
+            load_config(path)
+
+    @pytest.mark.parametrize("orientation", ["vertical", "horizontal"])
+    def test_missing_image_size_orientation_key(self, tmp_path, orientation):
+        data = valid_config()
+        del data["image_size"][orientation]
+        path = write_config(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match=orientation):
+            load_config(path)
+
+    def test_image_size_value_not_object(self, tmp_path):
+        data = valid_config()
+        data["image_size"]["vertical"] = 512
+        path = write_config(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="オブジェクト形式"):
+            load_config(path)
+
+    def test_image_size_width_out_of_range(self, tmp_path):
+        data = valid_config()
+        data["image_size"]["vertical"]["width"] = 100
+        path = write_config(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="512〜2048"):
+            load_config(path)
+
+    def test_image_size_not_multiple_of_8(self, tmp_path):
+        data = valid_config()
+        data["image_size"]["horizontal"]["height"] = 833
+        path = write_config(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="8 の倍数"):
+            load_config(path)
+
 
 # ── ImageBot: シャットダウン ──────────────────────────────────────────────────
 
@@ -912,6 +1063,7 @@ class TestGenImageModal:
         loras_val: str = "",
         positive_val: str = "1girl",
         negative_val: str = "bad quality",
+        orientation_val: str = "",
     ):
         """discord.ui.Modal.__init__ を回避し、TextInput を MagicMock で差し替えたモーダルを返す。"""
         bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
@@ -920,6 +1072,7 @@ class TestGenImageModal:
         modal.loras = MagicMock(value=loras_val)
         modal.positive = MagicMock(value=positive_val)
         modal.negative = MagicMock(value=negative_val)
+        modal.image_orientation = MagicMock(value=orientation_val)
         return modal, bot
 
     def _make_interaction(self, user_id: int = 99999, username: str = "testuser"):
@@ -944,6 +1097,7 @@ class TestGenImageModal:
         assert parsed["loras"] == ["lora1", "lora2"]
         assert parsed["positive"] == "1girl"
         assert parsed["negative"] == "bad quality"
+        assert parsed["image_orientation"] is None
 
     def test_build_parsed_no_loras_returns_empty_list(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path, loras_val="")
@@ -960,18 +1114,75 @@ class TestGenImageModal:
         parsed = modal._build_parsed()
         assert parsed["loras"] == []
 
+    def test_build_parsed_orientation_vertical(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path, orientation_val="vertical")
+        parsed = modal._build_parsed()
+        assert parsed["image_orientation"] == "vertical"
+
+    def test_build_parsed_orientation_horizontal(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path, orientation_val="horizontal")
+        parsed = modal._build_parsed()
+        assert parsed["image_orientation"] == "horizontal"
+
+    def test_build_parsed_orientation_case_insensitive(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path, orientation_val="Vertical")
+        parsed = modal._build_parsed()
+        assert parsed["image_orientation"] == "vertical"
+
+    def test_build_parsed_orientation_empty_returns_none(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path, orientation_val="")
+        parsed = modal._build_parsed()
+        assert parsed["image_orientation"] is None
+
+    def test_build_parsed_orientation_invalid_raises(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path, orientation_val="diagonal")
+        with pytest.raises(ValueError, match="vertical.*horizontal"):
+            modal._build_parsed()
+
     def test_build_message_text_with_loras(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path)
-        parsed = {"loras": ["lora1", "lora2"], "positive": "1girl", "negative": "bad"}
+        parsed = {
+            "loras": ["lora1", "lora2"],
+            "positive": "1girl",
+            "negative": "bad",
+            "image_orientation": None,
+        }
         text = modal._build_message_text(parsed)
         assert text == "loras: lora1, lora2\npositive: 1girl\nnegative: bad"
 
     def test_build_message_text_without_loras(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path)
-        parsed = {"loras": [], "positive": "1girl", "negative": "bad"}
+        parsed = {
+            "loras": [],
+            "positive": "1girl",
+            "negative": "bad",
+            "image_orientation": None,
+        }
         text = modal._build_message_text(parsed)
         assert "loras:" not in text
         assert text == "positive: 1girl\nnegative: bad"
+
+    def test_build_message_text_with_orientation(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path)
+        parsed = {
+            "loras": [],
+            "positive": "1girl",
+            "negative": "bad",
+            "image_orientation": "vertical",
+        }
+        text = modal._build_message_text(parsed)
+        assert "image_orientation: vertical" in text
+
+    def test_build_message_text_without_orientation_omits_line(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path)
+        parsed = {
+            "loras": [],
+            "positive": "1girl",
+            "negative": "bad",
+            "image_orientation": None,
+        }
+        text = modal._build_message_text(parsed)
+        assert "image_orientation" not in text
 
     def test_on_submit_sends_keyword_format_message(self, tmp_path):
         modal, bot = self._make_test_modal(
@@ -1010,6 +1221,7 @@ class TestGenImageModal:
         assert parsed_arg["loras"] == ["lora1"]
         assert parsed_arg["positive"] == "masterpiece"
         assert parsed_arg["negative"] == "worst"
+        assert parsed_arg["image_orientation"] is None
 
     def test_on_submit_passes_interaction_user(self, tmp_path):
         modal, bot = self._make_test_modal(tmp_path)

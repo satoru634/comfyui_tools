@@ -226,3 +226,4 @@ _*.txt
 _*.md
 result_*.json
 log/
+_*/
