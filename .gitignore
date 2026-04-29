@@ -224,6 +224,7 @@ generate_image_bot/config.json
 _*.json
 _*.txt
 _*.md
+_*.py
 result_*.json
 log/
 _*/
