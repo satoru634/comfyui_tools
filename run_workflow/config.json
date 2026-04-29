@@ -1,5 +1,9 @@
 {
     "comfyui_url": "http://127.0.0.1:8188",
+    "default_image_size": {
+        "width": 832,
+        "height": 1216
+    },
     "loras": {
         "my_lora": {
             "file": "my_lora.safetensors",

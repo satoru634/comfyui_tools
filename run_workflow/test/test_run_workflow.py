@@ -17,6 +17,8 @@ from run_workflow import (
     ComfyUIClient,
     WorkflowRunner,
     MAX_PROMPT_LENGTH,
+    IMAGE_SIZE_MIN,
+    IMAGE_SIZE_MAX,
 )
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
@@ -49,13 +51,25 @@ def valid_lora_list() -> dict:
     }
 
 
-def valid_config(**overrides) -> dict:
-    base = {"comfyui_url": "http://127.0.0.1:8188", "loras": valid_lora_list()}
+def valid_image_size(**overrides) -> dict:
+    base = {"width": 512, "height": 512}
     base.update(overrides)
     return base
 
 
-def make_workflow(lora_count: int, with_sampler: bool = True) -> dict:
+def valid_config(**overrides) -> dict:
+    base = {
+        "comfyui_url": "http://127.0.0.1:8188",
+        "default_image_size": valid_image_size(),
+        "loras": valid_lora_list(),
+    }
+    base.update(overrides)
+    return base
+
+
+def make_workflow(
+    lora_count: int, with_sampler: bool = True, with_latent: bool = True
+) -> dict:
     workflow = {
         "1": {
             "class_type": "CLIPTextEncode",
@@ -84,6 +98,12 @@ def make_workflow(lora_count: int, with_sampler: bool = True) -> dict:
             "class_type": "FaceDetailer",
             "inputs": {"seed": 99999, "steps": 20, "cfg": 7},
             "_meta": {"title": "FaceDetailer"},
+        }
+    if with_latent:
+        workflow["5"] = {
+            "class_type": "EmptyLatentImage",
+            "inputs": {"width": 512, "height": 512, "batch_size": 1},
+            "_meta": {"title": "empty_latent_image"},
         }
     return workflow
 
@@ -221,6 +241,96 @@ class TestLoadAndValidateInput:
         with pytest.raises(ValueError, match="'prompts.negative' が長すぎます"):
             load_and_validate_input(path)
 
+    def test_image_size_omitted_is_accepted(self, tmp_path):
+        path = write_json(tmp_path / "input.json", valid_input())
+        data = load_and_validate_input(path)
+        assert "image_size" not in data
+
+    def test_image_size_valid(self, tmp_path):
+        path = write_json(
+            tmp_path / "input.json",
+            valid_input(image_size={"width": 768, "height": 1024}),
+        )
+        data = load_and_validate_input(path)
+        assert data["image_size"] == {"width": 768, "height": 1024}
+
+    def test_image_size_not_object(self, tmp_path):
+        path = write_json(tmp_path / "input.json", valid_input(image_size=[512, 512]))
+        with pytest.raises(ValueError, match="'image_size' はオブジェクト形式"):
+            load_and_validate_input(path)
+
+    def test_image_size_missing_width(self, tmp_path):
+        path = write_json(
+            tmp_path / "input.json", valid_input(image_size={"height": 512})
+        )
+        with pytest.raises(
+            ValueError, match="'image_size' に 'width' キーがありません"
+        ):
+            load_and_validate_input(path)
+
+    def test_image_size_missing_height(self, tmp_path):
+        path = write_json(
+            tmp_path / "input.json", valid_input(image_size={"width": 512})
+        )
+        with pytest.raises(
+            ValueError, match="'image_size' に 'height' キーがありません"
+        ):
+            load_and_validate_input(path)
+
+    def test_image_size_width_not_integer(self, tmp_path):
+        path = write_json(
+            tmp_path / "input.json",
+            valid_input(image_size={"width": 512.0, "height": 512}),
+        )
+        with pytest.raises(ValueError, match="'image_size.width' は整数"):
+            load_and_validate_input(path)
+
+    def test_image_size_width_bool_rejected(self, tmp_path):
+        path = write_json(
+            tmp_path / "input.json",
+            valid_input(image_size={"width": True, "height": 512}),
+        )
+        with pytest.raises(ValueError, match="'image_size.width' は整数"):
+            load_and_validate_input(path)
+
+    @pytest.mark.parametrize("dim", ["width", "height"])
+    def test_image_size_below_min(self, tmp_path, dim):
+        size = {"width": 512, "height": 512}
+        size[dim] = IMAGE_SIZE_MIN - 1
+        path = write_json(tmp_path / "input.json", valid_input(image_size=size))
+        with pytest.raises(ValueError, match=f"'image_size.{dim}'"):
+            load_and_validate_input(path)
+
+    @pytest.mark.parametrize("dim", ["width", "height"])
+    def test_image_size_above_max(self, tmp_path, dim):
+        size = {"width": 512, "height": 512}
+        size[dim] = IMAGE_SIZE_MAX + 1
+        path = write_json(tmp_path / "input.json", valid_input(image_size=size))
+        with pytest.raises(ValueError, match=f"'image_size.{dim}'"):
+            load_and_validate_input(path)
+
+    @pytest.mark.parametrize("dim", ["width", "height"])
+    def test_image_size_not_multiple_of_8(self, tmp_path, dim):
+        size = {"width": 512, "height": 512}
+        size[dim] = 513
+        path = write_json(tmp_path / "input.json", valid_input(image_size=size))
+        with pytest.raises(ValueError, match="8 の倍数"):
+            load_and_validate_input(path)
+
+    def test_image_size_boundary_min(self, tmp_path):
+        path = write_json(
+            tmp_path / "input.json",
+            valid_input(image_size={"width": IMAGE_SIZE_MIN, "height": IMAGE_SIZE_MIN}),
+        )
+        assert load_and_validate_input(path)
+
+    def test_image_size_boundary_max(self, tmp_path):
+        path = write_json(
+            tmp_path / "input.json",
+            valid_input(image_size={"width": IMAGE_SIZE_MAX, "height": IMAGE_SIZE_MAX}),
+        )
+        assert load_and_validate_input(path)
+
 
 # ── load_config ───────────────────────────────────────────────────────────────
 
@@ -296,6 +406,29 @@ class TestLoadConfig:
             ),
         )
         with pytest.raises(ValueError, match=r"\.strength は数値"):
+            load_config(path)
+
+    def test_missing_default_image_size_key(self, tmp_path):
+        data = valid_config()
+        del data["default_image_size"]
+        path = write_json(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="'default_image_size' キーがありません"):
+            load_config(path)
+
+    def test_default_image_size_invalid(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json",
+            valid_config(default_image_size={"width": 100, "height": 512}),
+        )
+        with pytest.raises(ValueError, match="default_image_size が不正です"):
+            load_config(path)
+
+    def test_default_image_size_not_multiple_of_8(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json",
+            valid_config(default_image_size={"width": 513, "height": 512}),
+        )
+        with pytest.raises(ValueError, match="default_image_size が不正です"):
             load_config(path)
 
 
@@ -494,6 +627,35 @@ class TestWorkflowBuilderApply:
             wf, {"positive": "p", "negative": "n"}, [], seed=999
         )
         assert "seed" not in result["50"]["inputs"]
+
+    def test_image_size_applied(self):
+        wf = self.builder.apply(
+            make_workflow(0),
+            {"positive": "p", "negative": "n"},
+            [],
+            image_size={"width": 768, "height": 1024},
+        )
+        nodes = {n["_meta"]["title"]: n for n in wf.values()}
+        assert nodes["empty_latent_image"]["inputs"]["width"] == 768
+        assert nodes["empty_latent_image"]["inputs"]["height"] == 1024
+
+    def test_image_size_none_skips_latent_node(self):
+        wf = self.builder.apply(
+            make_workflow(0, with_latent=False),
+            {"positive": "p", "negative": "n"},
+            [],
+            image_size=None,
+        )
+        assert "5" not in wf
+
+    def test_image_size_missing_latent_node_raises(self):
+        with pytest.raises(ValueError, match="'empty_latent_image' が見つかりません"):
+            self.builder.apply(
+                make_workflow(0, with_latent=False),
+                {"positive": "p", "negative": "n"},
+                [],
+                image_size={"width": 512, "height": 512},
+            )
 
     def test_missing_lora_loader_node(self):
         with pytest.raises(ValueError, match="'lora_loader_1' が見つかりません"):
@@ -752,6 +914,31 @@ class TestWorkflowRunnerExecute:
             with pytest.raises(ValueError, match="接続できません"):
                 runner.execute([], {"positive": "good", "negative": "bad"})
 
+    def test_uses_default_image_size_when_not_specified(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        with patch("run_workflow.ComfyUIClient", return_value=self._mock_client([])):
+            runner.execute([], {"positive": "good", "negative": "bad"})
+        assert runner.parameters["image_size"] == {"width": 512, "height": 512}
+
+    def test_uses_given_image_size(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        with patch("run_workflow.ComfyUIClient", return_value=self._mock_client([])):
+            runner.execute(
+                [],
+                {"positive": "good", "negative": "bad"},
+                image_size={"width": 768, "height": 1024},
+            )
+        assert runner.parameters["image_size"] == {"width": 768, "height": 1024}
+
+    def test_raises_on_invalid_image_size(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        with pytest.raises(ValueError, match="8 の倍数"):
+            runner.execute(
+                [],
+                {"positive": "good", "negative": "bad"},
+                image_size={"width": 513, "height": 512},
+            )
+
 
 # ── WorkflowRunner.run ────────────────────────────────────────────────────────
 
@@ -811,6 +998,40 @@ class TestWorkflowRunnerRun:
         result = json.loads(Path(output_path).read_text(encoding="utf-8"))
         assert result["status"] == "error"
         assert "接続失敗" in result["error"]
+
+    def test_image_size_in_result_parameters(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        input_path = write_json(
+            tmp_path / "input.json",
+            valid_input(image_size={"width": 768, "height": 1024}),
+        )
+        output_path = str(tmp_path / "result.json")
+        with patch("run_workflow.ComfyUIClient", return_value=self._mock_client([])):
+            runner.run(input_path, output_path)
+        result = json.loads(Path(output_path).read_text(encoding="utf-8"))
+        assert result["parameters"]["image_size"] == {"width": 768, "height": 1024}
+
+    def test_default_image_size_used_when_omitted(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        input_path = write_json(tmp_path / "input.json", valid_input())
+        output_path = str(tmp_path / "result.json")
+        with patch("run_workflow.ComfyUIClient", return_value=self._mock_client([])):
+            runner.run(input_path, output_path)
+        result = json.loads(Path(output_path).read_text(encoding="utf-8"))
+        assert result["parameters"]["image_size"] == {"width": 512, "height": 512}
+
+    def test_invalid_image_size_writes_error_result(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        input_path = write_json(
+            tmp_path / "input.json",
+            valid_input(image_size={"width": 513, "height": 512}),
+        )
+        output_path = str(tmp_path / "result.json")
+        with pytest.raises(SystemExit):
+            runner.run(input_path, output_path)
+        result = json.loads(Path(output_path).read_text(encoding="utf-8"))
+        assert result["status"] == "error"
+        assert "8 の倍数" in result["error"]
 
 
 # ── write_result ──────────────────────────────────────────────────────────────

@@ -25,9 +25,15 @@ comfyui_tools/
 ### config.json
 ```json
 {
-  "comfyui_url": "http://127.0.0.1:8188"
+  "comfyui_url": "http://127.0.0.1:8188",
+  "default_image_size": {
+    "width": 512,
+    "height": 512
+  }
 }
 ```
+
+- `default_image_size`: 入力 JSON で `image_size` を省略した場合に使用する既定の画像サイズ。
 
 ### lora_list.json
 LoRA名（入力JSONのキー）とLoRAファイル名・ストレングスのマッピング。
@@ -59,12 +65,18 @@ python run_workflow.py --input input.json --output result.json
   "prompts": {
     "positive": "masterpiece, best quality, 1girl ...",
     "negative": "worst quality, bad quality ..."
+  },
+  "image_size": {
+    "width": 768,
+    "height": 1024
   }
 }
 ```
 
-- `LoRAs`: `lora_list.json` のキー名を指定する。0〜4個まで指定可能。
+- `loras`: `config.json` の `loras` セクションのキー名を指定する。0〜4個まで指定可能。
 - `prompts.positive` / `prompts.negative`: プロンプト文字列。
+- `image_size` (省略可能): 生成する画像のサイズ。省略時は `config.json` の `default_image_size` を使用する。
+  - `width` / `height`: 整数。512〜2048 の範囲で 8 の倍数であること。
 
 ## テンプレートの自動選択
 
@@ -87,6 +99,7 @@ python run_workflow.py --input input.json --output result.json
 |---|---|
 | `positive_prompt` | `prompts.positive` の文字列 |
 | `negative_prompt` | `prompts.negative` の文字列 |
+| `empty_latent_image` | `image_size.width` / `image_size.height` |
 | `lora_loader_1` | 1つ目のLoRAファイル名・ストレングス |
 | `lora_loader_2` | 2つ目のLoRAファイル名・ストレングス |
 | `lora_loader_3` | 3つ目のLoRAファイル名・ストレングス |
@@ -100,7 +113,7 @@ python run_workflow.py --input input.json --output result.json
 
 | クラス | 責務 |
 |---|---|
-| `WorkflowBuilder` | テンプレート選択・読み込み・プロンプト/LoRA/seed の書き換え |
+| `WorkflowBuilder` | テンプレート選択・読み込み・プロンプト/LoRA/画像サイズ/seed の書き換え |
 | `ComfyUIClient` | ComfyUI REST API 呼び出し・WebSocket 監視 |
 | `WorkflowRunner` | 上記2クラスを束ねてワークフロー実行を制御するファサード |
 
@@ -111,14 +124,15 @@ python run_workflow.py --input input.json --output result.json
 
 ## 処理フロー
 
-1. `config.json` を読み込み、接続先 URL を取得する
+1. `config.json` を読み込み、接続先 URL・LoRA定義・`default_image_size` を取得する
 2. 入力 JSON を読み込む
-3. `lora_list.json` を読み込み、LoRA名 → ファイル名・ストレングスを解決する
-4. LoRA の個数に応じてテンプレートを自動選択し、プロンプト・LoRA を書き換える
-5. `POST /prompt` でワークフローを送信し、`prompt_id` を取得する
-6. WebSocket (`ws://host/ws?clientId=<uuid>`) で実行完了またはエラーを監視する
-7. 完了後、`GET /history/{prompt_id}` で出力ファイル一覧を取得する
-8. `result.json` を出力して終了する
+3. `image_size` が省略されている場合、`config.json` の `default_image_size` を使用する
+4. LoRA名 → ファイル名・ストレングスを解決する
+5. LoRA の個数に応じてテンプレートを自動選択し、プロンプト・LoRA・画像サイズを書き換える
+6. `POST /prompt` でワークフローを送信し、`prompt_id` を取得する
+7. WebSocket (`ws://host/ws?clientId=<uuid>`) で実行完了またはエラーを監視する
+8. 完了後、`GET /history/{prompt_id}` で出力ファイル一覧を取得する
+9. `result.json` を出力して終了する
 
 ## result.json フォーマット
 
@@ -135,7 +149,8 @@ python run_workflow.py --input input.json --output result.json
     "loras": [
       {"name": "my_lora", "file": "my_lora.safetensors", "strength": 0.8},
       {"name": "another_lora", "file": "another_lora.safetensors", "strength": 0.7}
-    ]
+    ],
+    "image_size": {"width": 768, "height": 1024}
   },
   "outputs": [
     {"filename": "ComfyUI_00001_.png", "subfolder": "", "type": "output"}
@@ -156,7 +171,8 @@ python run_workflow.py --input input.json --output result.json
     "negative": "worst quality, bad quality ...",
     "loras": [
       {"name": "my_lora", "file": "my_lora.safetensors", "strength": 0.8}
-    ]
+    ],
+    "image_size": {"width": 512, "height": 512}
   },
   "outputs": [],
   "error": "ComfyUI に接続できません: Connection refused"
@@ -169,9 +185,14 @@ python run_workflow.py --input input.json --output result.json
 |---|---|
 | ComfyUI 未起動・接続失敗 | result.json にエラー記録して終了 |
 | 入力 JSON のフォーマットが不正 | result.json にエラー記録して終了 |
-| LoRA名が lora_list.json に存在しない | result.json にエラー記録して終了 |
+| LoRA名が config.json の loras に存在しない | result.json にエラー記録して終了 |
 | LoRA が 5個以上指定された | result.json にエラー記録して終了 |
+| `image_size.width` / `image_size.height` が整数でない | result.json にエラー記録して終了 |
+| `image_size.width` / `image_size.height` が 512〜2048 の範囲外 | result.json にエラー記録して終了 |
+| `image_size.width` / `image_size.height` が 8 の倍数でない | result.json にエラー記録して終了 |
+| `config.json` に `default_image_size` がない | result.json にエラー記録して終了 |
 | テンプレートファイルが存在しない | result.json にエラー記録して終了 |
+| テンプレートに `empty_latent_image` ノードが見つからない | result.json にエラー記録して終了 |
 | ComfyUI 側のワークフロー実行エラー | result.json にエラー記録して終了 |
 
 ## 開発ルール
@@ -194,5 +215,14 @@ python run_workflow.py --input input.json --output result.json --config config.j
 ## 実行例(Pythonからimportして使用)
 ```python
 runner = WorkflowRunner("config.json")
+
+# image_size を指定する場合
+outputs = runner.execute(
+    ["my_lora"],
+    {"positive": "...", "negative": "..."},
+    image_size={"width": 768, "height": 1024},
+)
+
+# image_size を省略する場合（config.json の default_image_size を使用）
 outputs = runner.execute(["my_lora"], {"positive": "...", "negative": "..."})
 ```

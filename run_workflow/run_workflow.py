@@ -16,6 +16,9 @@ import websockets
 # Discord ボット経由でユーザー入力を受け取るため、巨大文字列によるメモリ枯渇を防ぐ上限
 MAX_PROMPT_LENGTH = 3000
 
+IMAGE_SIZE_MIN = 512
+IMAGE_SIZE_MAX = 2048
+
 # ── 結果出力 ──────────────────────────────────────────────────────────────────
 
 
@@ -42,6 +45,25 @@ def write_result(
 
 
 # ── 設定・入力読み込み ─────────────────────────────────────────────────────────
+
+
+def _validate_image_size(image_size: dict) -> None:
+    if not isinstance(image_size, dict):
+        raise ValueError("'image_size' はオブジェクト形式である必要があります")
+    for key in ("width", "height"):
+        if key not in image_size:
+            raise ValueError(f"'image_size' に '{key}' キーがありません")
+        val = image_size[key]
+        if isinstance(val, bool) or not isinstance(val, int):
+            raise ValueError(f"'image_size.{key}' は整数である必要があります")
+        if not (IMAGE_SIZE_MIN <= val <= IMAGE_SIZE_MAX):
+            raise ValueError(
+                f"'image_size.{key}' は {IMAGE_SIZE_MIN}〜{IMAGE_SIZE_MAX} の範囲で指定してください（指定値: {val}）"
+            )
+        if val % 8 != 0:
+            raise ValueError(
+                f"'image_size.{key}' は 8 の倍数である必要があります（指定値: {val}）"
+            )
 
 
 def _validate_lora_entries(loras: dict) -> None:
@@ -84,6 +106,12 @@ def load_config(config_path: str) -> dict:
         raise ValueError("config.json に 'comfyui_url' キーがありません")
     if not isinstance(data["comfyui_url"], str) or not data["comfyui_url"].strip():
         raise ValueError("'comfyui_url' は空でない文字列である必要があります")
+    if "default_image_size" not in data:
+        raise ValueError("config.json に 'default_image_size' キーがありません")
+    try:
+        _validate_image_size(data["default_image_size"])
+    except ValueError as e:
+        raise ValueError(f"config.json の default_image_size が不正です: {e}") from e
     if "loras" not in data:
         raise ValueError("config.json に 'loras' キーがありません")
     _validate_lora_entries(data["loras"])
@@ -132,6 +160,8 @@ def load_and_validate_input(input_path: str) -> dict:
         raise ValueError("入力 JSON に 'prompts' キーがありません")
     _validate_loras(data["loras"])
     _validate_prompts(data["prompts"])
+    if "image_size" in data:
+        _validate_image_size(data["image_size"])
     return data
 
 
@@ -187,6 +217,7 @@ class WorkflowBuilder:
         prompts: dict,
         resolved_loras: list[dict],
         seed: int | None = None,
+        image_size: dict | None = None,
     ) -> dict:
         # テンプレートを直接書き換えないよう deepcopy してから処理する
         workflow = copy.deepcopy(workflow)
@@ -198,6 +229,8 @@ class WorkflowBuilder:
         }
         self._apply_prompts(title_map, prompts)
         self._apply_loras(title_map, resolved_loras)
+        if image_size is not None:
+            self._apply_image_size(title_map, image_size)
         self._apply_seeds(
             workflow, seed if seed is not None else random.randint(0, 2**53)
         )
@@ -211,6 +244,13 @@ class WorkflowBuilder:
             if key not in title_map:
                 raise ValueError(f"テンプレートにノード '{key}' が見つかりません")
             title_map[key]["inputs"]["text"] = prompts[field]
+
+    def _apply_image_size(self, title_map: dict, image_size: dict) -> None:
+        key = "empty_latent_image"
+        if key not in title_map:
+            raise ValueError(f"テンプレートにノード '{key}' が見つかりません")
+        title_map[key]["inputs"]["width"] = image_size["width"]
+        title_map[key]["inputs"]["height"] = image_size["height"]
 
     def _apply_loras(self, title_map: dict, resolved_loras: list[dict]) -> None:
         for i, lora in enumerate(resolved_loras, start=1):
@@ -315,7 +355,9 @@ class WorkflowRunner:
         self.prompt_id: str | None = None
         self.parameters: dict = {}
 
-    def execute(self, loras: list[str], prompts: dict) -> list[dict]:
+    def execute(
+        self, loras: list[str], prompts: dict, image_size: dict | None = None
+    ) -> list[dict]:
         """ワークフローを実行し、出力ファイル一覧を返す。エラー時は ValueError を送出。"""
         self.template_path = None
         self.prompt_id = None
@@ -323,17 +365,25 @@ class WorkflowRunner:
 
         _validate_loras(loras)
         _validate_prompts(prompts)
+        if image_size is not None:
+            _validate_image_size(image_size)
+        effective_image_size = (
+            image_size if image_size is not None else self.config["default_image_size"]
+        )
         resolved = resolve_loras(loras, self.config["loras"])
         self.parameters = {
             "positive": prompts["positive"],
             "negative": prompts["negative"],
             "loras": resolved,
+            "image_size": effective_image_size,
         }
 
         builder = WorkflowBuilder(self._templates_dir)
         self.template_path = builder.select_template(len(resolved))
         workflow = builder.load_template(self.template_path)
-        workflow = builder.apply(workflow, prompts, resolved)
+        workflow = builder.apply(
+            workflow, prompts, resolved, image_size=effective_image_size
+        )
 
         client = ComfyUIClient(self.config["comfyui_url"])
         client_id = str(uuid.uuid4())
@@ -350,7 +400,11 @@ class WorkflowRunner:
         """入力ファイルを読み込んでワークフローを実行し、結果を output_path に書き出す。"""
         try:
             input_data = load_and_validate_input(input_path)
-            outputs = self.execute(input_data["loras"], input_data["prompts"])
+            outputs = self.execute(
+                input_data["loras"],
+                input_data["prompts"],
+                input_data.get("image_size"),
+            )
         except ValueError as e:
             write_result(
                 output_path,

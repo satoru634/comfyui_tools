@@ -14,7 +14,7 @@ ComfyUI 関連の Python ツール群。各ツールはサブディレクトリ�
 
 | ツール | 説明 | 詳細 |
 |---|---|---|
-| `run_workflow/` | ComfyUI のワークフローを Python から自動実行するツール | [SPEC.md](run_workflow/SPEC.md) |
+| `run_workflow/` | ComfyUI のワークフローを Python から自動実行するツール | [SPEC.md](run_workflow/doc/SPEC.md) |
 | `generate_image_bot/` | Discord のメンションで ComfyUI に画像生成を指示し、生成された画像を返送する Discord ボット | [SPEC.md](generate_image_bot/doc/SPEC.md) |
 
 ## テスト
