@@ -8,16 +8,28 @@ WebSocket で進捗をリアルタイム監視し、結果を `result.json` に�
 ## ファイル構成
 
 ```
-comfyui_tools/
-  run_workflow.py         # メインスクリプト
-  config.json             # 接続設定・LoRAマッピング
-  templates/                     # ワークフローテンプレート
-    template_lora_0.json         # LoRA 0個用
-    template_lora_1.json         # LoRA 1個用
-    template_lora_2.json         # LoRA 2個用
-    template_lora_3.json         # LoRA 3個用
-    template_lora_4.json         # LoRA 4個用
-  requirements.txt         # 必要ライブラリ
+run_workflow/
+  run_workflow.py         # メインスクリプト（WorkflowRunner・エントリポイント）
+  config.json             # 接続設定・既定画像サイズ・LoRAマッピング
+  requirements.txt
+  modules/
+    load_files.py         # 設定・入力ファイルの読み込みと検証
+    workflow_builder.py   # テンプレート選択・書き換え
+    comfyui_client.py     # ComfyUI REST API / WebSocket クライアント
+  templates/
+    template_lora_0.json  # LoRA 0個用
+    template_lora_1.json  # LoRA 1個用
+    template_lora_2.json  # LoRA 2個用
+    template_lora_3.json  # LoRA 3個用
+    template_lora_4.json  # LoRA 4個用
+  test/
+    test_helper.py
+    test_run_workflow.py
+    test_load_files.py
+    test_workflow_builder.py
+    test_comfyui_client.py
+  doc/
+    SPEC.md
 ```
 
 ## 設定ファイル
@@ -29,20 +41,16 @@ comfyui_tools/
   "default_image_size": {
     "width": 512,
     "height": 512
+  },
+  "loras": {
+    "my_lora": {"file": "my_lora.safetensors", "strength": 0.8},
+    "another_lora": {"file": "another_lora.safetensors", "strength": 0.7}
   }
 }
 ```
 
 - `default_image_size`: 入力 JSON で `image_size` を省略した場合に使用する既定の画像サイズ。
-
-### lora_list.json
-LoRA名（入力JSONのキー）とLoRAファイル名・ストレングスのマッピング。
-```json
-{
-  "my_lora": {"file": "my_lora.safetensors", "strength": 0.8},
-  "another_lora": {"file": "another_lora.safetensors", "strength": 0.7}
-}
-```
+- `loras`: LoRA キー名とファイル名・強度のマッピング。入力 JSON の `loras` リストで指定するキー名はここに定義する。
 
 ## 入力インターフェース
 
@@ -52,10 +60,11 @@ LoRA名（入力JSONのキー）とLoRAファイル名・ストレングスの�
 python run_workflow.py --input input.json --output result.json
 ```
 
-| オプション | 必須 | 説明 |
-|---|---|---|
-| `--input` | ○ | 入力 JSON ファイルのパス |
-| `--output` | △ | result.json の出力先（省略時: `result.json`） |
+| オプション | 省略形 | 必須 | デフォルト | 説明 |
+|---|---|---|---|---|
+| `--input` | `-i` | ○ | — | 入力 JSON ファイルのパス |
+| `--output` | `-o` | — | `result_<timestamp>.json` | 結果 JSON の出力先 |
+| `--config` | `-c` | — | `config.json` | 設定ファイルのパス |
 
 ### 入力 JSON フォーマット
 
@@ -73,14 +82,14 @@ python run_workflow.py --input input.json --output result.json
 }
 ```
 
-- `loras`: `config.json` の `loras` セクションのキー名を指定する。0〜4個まで指定可能。
+- `loras`: `config.json` の `loras` に定義したキー名を指定する。0〜4個まで指定可能。
 - `prompts.positive` / `prompts.negative`: プロンプト文字列。
 - `image_size` (省略可能): 生成する画像のサイズ。省略時は `config.json` の `default_image_size` を使用する。
   - `width` / `height`: 整数。512〜2048 の範囲で 8 の倍数であること。
 
 ## テンプレートの自動選択
 
-入力 JSON の `LoRAs` の個数に応じて、使用するテンプレートを自動で選択する。
+入力 JSON の `loras` の個数に応じて、使用するテンプレートを自動で選択する。
 
 | LoRA 個数 | 使用テンプレート |
 |---|---|
@@ -109,13 +118,14 @@ python run_workflow.py --input input.json --output result.json
 
 ## アーキテクチャ
 
-### クラス構成
+### クラス・モジュール構成
 
-| クラス | 責務 |
+| クラス / モジュール | 責務 |
 |---|---|
+| `WorkflowRunner` | `WorkflowBuilder`・`ComfyUIClient` を束ねてワークフロー実行を制御するファサード |
 | `WorkflowBuilder` | テンプレート選択・読み込み・プロンプト/LoRA/画像サイズ/seed の書き換え |
 | `ComfyUIClient` | ComfyUI REST API 呼び出し・WebSocket 監視 |
-| `WorkflowRunner` | 上記2クラスを束ねてワークフロー実行を制御するファサード |
+| `load_files` | `config.json` と入力 JSON の読み込み・検証 (`load_config`, `load_and_validate_input`, `validate_inputs`) |
 
 ### 実装上の制約
 
@@ -142,7 +152,7 @@ python run_workflow.py --input input.json --output result.json
   "status": "success",
   "prompt_id": "abc123",
   "timestamp": "2026-04-22T20:30:00",
-  "template": "templates/lora2.json",
+  "template": "...templates/template_lora_2.json",
   "parameters": {
     "positive": "masterpiece, best quality, 1girl ...",
     "negative": "worst quality, bad quality ...",
@@ -165,7 +175,7 @@ python run_workflow.py --input input.json --output result.json
   "status": "error",
   "prompt_id": null,
   "timestamp": "2026-04-22T20:30:00",
-  "template": "templates/lora2.json",
+  "template": "...templates/template_lora_1.json",
   "parameters": {
     "positive": "masterpiece, best quality, 1girl ...",
     "negative": "worst quality, bad quality ...",

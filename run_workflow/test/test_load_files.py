@@ -1,0 +1,300 @@
+"""run_workflow.py のユニットテスト"""
+
+import pytest
+
+from test_helper import (
+    write_json,
+    valid_input,
+    valid_config,
+)
+
+from modules.load_files import (
+    load_config,
+    validate_inputs,
+    load_and_validate_input,
+    IMAGE_SIZE_MAX,
+    IMAGE_SIZE_MIN,
+)
+
+
+# ── validate_inputs ───────────────────────────────────────────────────────────
+
+
+class TestValidateInputs:
+    def test_valid_single_lora(self):
+        inputs = valid_input()
+        assert validate_inputs(inputs["loras"], inputs["prompts"], None) == True
+
+    def test_valid_no_loras(self):
+        inputs = valid_input(loras=[])
+        assert validate_inputs(inputs["loras"], inputs["prompts"], None) == True
+
+    def test_valid_four_loras(self):
+        inputs = valid_input(loras=["a", "b", "c", "d"])
+        assert validate_inputs(inputs["loras"], inputs["prompts"], None) == True
+
+    def test_loras_not_list(self):
+        inputs = valid_input(loras="my_lora")
+        with pytest.raises(ValueError, match="リスト形式"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_loras_exceeds_max(self):
+        inputs = valid_input(loras=["a", "b", "c", "d", "e"])
+        with pytest.raises(ValueError, match="最大4個"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_loras_item_empty_string(self):
+        inputs = valid_input(loras=[""])
+        with pytest.raises(ValueError, match="空でない文字列"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_missing_positive_key(self):
+        inputs = valid_input(prompts={"negative": "bad"})
+        with pytest.raises(ValueError, match="'positive' キーがありません"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_loras_item_not_string(self):
+        inputs = valid_input(loras=[123])
+        with pytest.raises(ValueError, match="空でない文字列"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_prompts_not_object(self):
+        inputs = valid_input(prompts="positive prompt")
+        with pytest.raises(ValueError, match="'prompts' はオブジェクト形式"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_missing_negative_key(self):
+        inputs = valid_input(prompts={"positive": "good"})
+        with pytest.raises(ValueError, match="'negative' キーがありません"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_positive_not_string(self):
+        inputs = valid_input(prompts={"positive": 123, "negative": "bad"})
+        with pytest.raises(ValueError, match="'prompts.positive' は文字列"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_positive_at_max_length(self):
+        inputs = valid_input(prompts={"positive": "a" * 3000, "negative": "bad"})
+        assert validate_inputs(inputs["loras"], inputs["prompts"], None) == True
+
+    def test_positive_exceeds_max_length(self):
+        inputs = valid_input(prompts={"positive": "a" * 3001, "negative": "bad"})
+        with pytest.raises(ValueError, match="'prompts.positive' が長すぎます"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_negative_exceeds_max_length(self):
+        inputs = valid_input(prompts={"positive": "good", "negative": "b" * 3001})
+        with pytest.raises(ValueError, match="'prompts.negative' が長すぎます"):
+            validate_inputs(inputs["loras"], inputs["prompts"], None)
+
+    def test_image_size_not_object(self):
+        inputs = valid_input(image_size=[512, 512])
+        with pytest.raises(ValueError, match="'image_size' はオブジェクト形式"):
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+
+    def test_image_size_missing_width(self):
+        inputs = valid_input(image_size={"height": 512})
+        with pytest.raises(
+            ValueError, match="'image_size' に 'width' キーがありません"
+        ):
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+
+    def test_image_size_missing_height(self):
+        inputs = valid_input(image_size={"width": 512})
+        with pytest.raises(
+            ValueError, match="'image_size' に 'height' キーがありません"
+        ):
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+
+    def test_image_size_width_not_integer(self):
+        inputs = valid_input(image_size={"width": 512.0, "height": 512})
+        with pytest.raises(ValueError, match="'image_size.width' は整数"):
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+
+    def test_image_size_width_bool_rejected(self):
+        inputs = valid_input(image_size={"width": True, "height": 512})
+        with pytest.raises(ValueError, match="'image_size.width' は整数"):
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+
+    @pytest.mark.parametrize("dim", ["width", "height"])
+    def test_image_size_below_min(self, dim):
+        size = {"width": 512, "height": 512}
+        size[dim] = IMAGE_SIZE_MIN - 1
+        inputs = valid_input(image_size=size)
+        with pytest.raises(ValueError, match=f"'image_size.{dim}'"):
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+
+    @pytest.mark.parametrize("dim", ["width", "height"])
+    def test_image_size_above_max(self, dim):
+        size = {"width": 512, "height": 512}
+        size[dim] = IMAGE_SIZE_MAX + 1
+        inputs = valid_input(image_size=size)
+        with pytest.raises(ValueError, match=f"'image_size.{dim}'"):
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+
+    @pytest.mark.parametrize("dim", ["width", "height"])
+    def test_image_size_not_multiple_of_8(self, dim):
+        size = {"width": 512, "height": 512}
+        size[dim] = 513
+        inputs = valid_input(image_size=size)
+        with pytest.raises(ValueError, match="8 の倍数"):
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+
+    def test_image_size_valid(self):
+        inputs = valid_input(image_size={"width": 768, "height": 1024})
+        assert (
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+            == True
+        )
+
+    def test_image_size_boundary_min(self):
+        inputs = valid_input(
+            image_size={"width": IMAGE_SIZE_MIN, "height": IMAGE_SIZE_MIN}
+        )
+        assert (
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+            == True
+        )
+
+    def test_image_size_boundary_max(self):
+        inputs = valid_input(
+            image_size={"width": IMAGE_SIZE_MAX, "height": IMAGE_SIZE_MAX}
+        )
+        assert (
+            validate_inputs(inputs["loras"], inputs["prompts"], inputs["image_size"])
+            == True
+        )
+
+
+# ── load_and_validate_input ───────────────────────────────────────────────────
+
+
+class TestLoadAndValidateInput:
+    def test_file_not_found(self, tmp_path):
+        with pytest.raises(ValueError, match="入力ファイルが見つかりません"):
+            load_and_validate_input(str(tmp_path / "nonexistent.json"))
+
+    def test_invalid_json(self, tmp_path):
+        p = tmp_path / "input.json"
+        p.write_text("not json", encoding="utf-8")
+        with pytest.raises(ValueError, match="入力 JSON の解析に失敗しました"):
+            load_and_validate_input(str(p))
+
+    def test_root_not_object(self, tmp_path):
+        path = write_json(tmp_path / "input.json", [1, 2, 3])
+        with pytest.raises(ValueError, match="オブジェクト形式"):
+            load_and_validate_input(path)
+
+    def test_missing_loras_key(self, tmp_path):
+        data = valid_input()
+        del data["loras"]
+        path = write_json(tmp_path / "input.json", data)
+        with pytest.raises(ValueError, match="'loras' キーがありません"):
+            load_and_validate_input(path)
+
+    def test_missing_prompts_key(self, tmp_path):
+        data = valid_input()
+        del data["prompts"]
+        path = write_json(tmp_path / "input.json", data)
+        with pytest.raises(ValueError, match="'prompts' キーがありません"):
+            load_and_validate_input(path)
+
+
+# ── load_config ───────────────────────────────────────────────────────────────
+
+
+class TestLoadConfig:
+    def test_valid(self, tmp_path):
+        path = write_json(tmp_path / "config.json", valid_config())
+        config = load_config(path)
+        assert config["comfyui_url"] == "http://127.0.0.1:8188"
+        assert config["loras"]["my_lora"]["file"] == "my_lora.safetensors"
+
+    def test_file_not_found(self, tmp_path):
+        with pytest.raises(ValueError, match="設定ファイルが見つかりません"):
+            load_config(str(tmp_path / "nonexistent.json"))
+
+    def test_invalid_json(self, tmp_path):
+        p = tmp_path / "config.json"
+        p.write_text("not json", encoding="utf-8")
+        with pytest.raises(ValueError, match="config.json の解析に失敗しました"):
+            load_config(str(p))
+
+    def test_missing_comfyui_url_key(self, tmp_path):
+        data = valid_config()
+        del data["comfyui_url"]
+        path = write_json(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="'comfyui_url' キーがありません"):
+            load_config(path)
+
+    def test_comfyui_url_empty(self, tmp_path):
+        path = write_json(tmp_path / "config.json", valid_config(comfyui_url=""))
+        with pytest.raises(ValueError, match="空でない文字列"):
+            load_config(path)
+
+    def test_comfyui_url_not_string(self, tmp_path):
+        path = write_json(tmp_path / "config.json", valid_config(comfyui_url=8188))
+        with pytest.raises(ValueError, match="空でない文字列"):
+            load_config(path)
+
+    def test_missing_loras_key(self, tmp_path):
+        data = valid_config()
+        del data["loras"]
+        path = write_json(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="'loras' キーがありません"):
+            load_config(path)
+
+    def test_loras_entry_not_object(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json", valid_config(loras={"bad": "file.safetensors"})
+        )
+        with pytest.raises(ValueError, match="オブジェクト形式"):
+            load_config(path)
+
+    def test_loras_missing_file_key(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json", valid_config(loras={"lora": {"strength": 0.8}})
+        )
+        with pytest.raises(ValueError, match=r"\.file は空でない文字列"):
+            load_config(path)
+
+    def test_loras_missing_strength_key(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json",
+            valid_config(loras={"lora": {"file": "lora.safetensors"}}),
+        )
+        with pytest.raises(ValueError, match=r"\.strength は数値"):
+            load_config(path)
+
+    def test_loras_strength_not_number(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json",
+            valid_config(
+                loras={"lora": {"file": "lora.safetensors", "strength": "0.8"}}
+            ),
+        )
+        with pytest.raises(ValueError, match=r"\.strength は数値"):
+            load_config(path)
+
+    def test_missing_default_image_size_key(self, tmp_path):
+        data = valid_config()
+        del data["default_image_size"]
+        path = write_json(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="'default_image_size' キーがありません"):
+            load_config(path)
+
+    def test_default_image_size_invalid(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json",
+            valid_config(default_image_size={"width": 100, "height": 512}),
+        )
+        with pytest.raises(ValueError, match="default_image_size が不正です"):
+            load_config(path)
+
+    def test_default_image_size_not_multiple_of_8(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json",
+            valid_config(default_image_size={"width": 513, "height": 512}),
+        )
+        with pytest.raises(ValueError, match="default_image_size が不正です"):
+            load_config(path)
