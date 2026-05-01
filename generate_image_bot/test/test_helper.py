@@ -1,0 +1,76 @@
+"""generate_image_bot.py のテストコードで使用するヘルパー関数群"""
+
+import json
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import discord
+
+from modules.image_bot import ImageBot
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def valid_config() -> dict:
+    return {
+        "discord_token": "test_token",
+        "comfyui_output_dir": "C:/output",
+        "run_workflow_config": "../run_workflow/config.json",
+        "image_size": {
+            "vertical": {"width": 832, "height": 1216},
+            "horizontal": {"width": 1216, "height": 832},
+        },
+        "reactions": {
+            "processing": "⏳",
+            "success": "✅",
+            "error": "❌",
+        },
+        "messages": {
+            "rate_limit": "あと {remaining_seconds} 秒待ってください。",
+            "generating": "現在生成中です。しばらくお待ちください。",
+            "parse_error": "形式が正しくありません: {error}",
+            "execution_error": "生成に失敗しました: {error}",
+            "file_too_large": "画像が大きすぎます（{size_mb} MB）",
+            "unexpected_error": "予期しないエラーが発生しました",
+            "dm_not_supported": "DM からは使用できません。",
+            "shutdown_in_progress": "シャットダウン中です。",
+        },
+    }
+
+
+def write_config(path: Path, data: dict) -> str:
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return str(path)
+
+
+def make_bot_for_test(config: dict, runner, output_dir=None) -> ImageBot:
+    if output_dir is not None:
+        config = {**config, "comfyui_output_dir": str(output_dir)}
+    with patch.object(discord.Client, "__init__", return_value=None):
+        bot = ImageBot(config, runner)
+    # discord.Client.user は _connection.user を参照するため両方設定する
+    bot._connection = MagicMock()
+    bot._connection.user = MagicMock(name="bot_user")
+    return bot
+
+
+def make_message(bot_user, content: str, guild_set: bool = True, is_own: bool = False):
+    msg = MagicMock()
+    if is_own:
+        msg.author = bot_user
+    else:
+        msg.author = MagicMock(id=99999)
+        msg.author.name = "testuser"
+    msg.content = content
+    msg.guild = MagicMock() if guild_set else None
+    msg.mentions = [bot_user]
+    msg.add_reaction = AsyncMock()
+    msg.remove_reaction = AsyncMock()
+    msg.reply = AsyncMock()
+    msg.channel = MagicMock()
+    msg.channel.send = AsyncMock()
+    return msg
+
+
+VALID_CONTENT = "<@1>\npositive: 1girl\nnegative: bad quality"
+VALID_OUTPUTS = [{"filename": "output.png", "subfolder": "", "type": "output"}]
