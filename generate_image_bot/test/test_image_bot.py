@@ -68,13 +68,47 @@ class TestImageBotHandleRequest:
         msg.add_reaction.assert_called_with("❌")
         assert "秒" in msg.reply.call_args.args[0]
 
-    def test_global_lock_sends_generating_message(self, tmp_path):
+    def test_rate_limit_skipped_when_user_has_active_requests(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        # レート制限中でも処理中リクエストがあれば通過する
+        bot._limiter.record_request(99999)
+        bot._limiter.increment_active(99999)
+        msg = make_message(bot.user, VALID_CONTENT)
+        with patch("modules.image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        runner.execute.assert_called_once()
+
+    def test_concurrent_limit_sends_error_message(self, tmp_path):
         bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
-        bot._limiter.set_generating(True)
+        from modules.rate_limiter import RateLimiter
+
+        for _ in range(RateLimiter.MAX_CONCURRENT):
+            bot._limiter.increment_active(99999)
         msg = make_message(bot.user, VALID_CONTENT)
         asyncio.run(bot._handle_request(msg))
         msg.add_reaction.assert_called_with("❌")
-        assert msg.reply.call_args.args[0] == "現在生成中です。しばらくお待ちください。"
+        assert (
+            msg.reply.call_args.args[0]
+            == "リクエストが上限に達しています。しばらくお待ちください。"
+        )
+
+    def test_other_user_active_does_not_block_request(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        # 別ユーザー（ID=11111）が上限いっぱいまで生成中でも、このユーザー（ID=99999）は通る
+        from modules.rate_limiter import RateLimiter
+
+        for _ in range(RateLimiter.MAX_CONCURRENT):
+            bot._limiter.increment_active(11111)
+        msg = make_message(bot.user, VALID_CONTENT)
+        with patch("modules.image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        runner.execute.assert_called_once()
 
     def test_valid_request_calls_execute_with_correct_args(self, tmp_path):
         runner = MagicMock()
@@ -145,7 +179,7 @@ class TestImageBotHandleRequest:
         asyncio.run(bot._handle_request(msg))
         assert msg.reply.call_args.args[0] == "予期しないエラーが発生しました"
 
-    def test_generating_lock_released_after_success(self, tmp_path):
+    def test_active_count_decremented_after_success(self, tmp_path):
         runner = MagicMock()
         runner.execute.return_value = VALID_OUTPUTS
         (tmp_path / "output.png").write_bytes(b"x")
@@ -153,15 +187,15 @@ class TestImageBotHandleRequest:
         msg = make_message(bot.user, VALID_CONTENT)
         with patch("modules.image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
-        assert bot._limiter.is_generating() is False
+        assert bot._limiter.has_active() is False
 
-    def test_generating_lock_released_after_error(self, tmp_path):
+    def test_active_count_decremented_after_error(self, tmp_path):
         runner = MagicMock()
         runner.execute.side_effect = ValueError("error")
         bot = make_bot_for_test(valid_config(), runner, tmp_path)
         msg = make_message(bot.user, VALID_CONTENT)
         asyncio.run(bot._handle_request(msg))
-        assert bot._limiter.is_generating() is False
+        assert bot._limiter.has_active() is False
 
     def test_sends_without_reference_when_message_deleted(self, tmp_path):
         runner = MagicMock()
@@ -238,8 +272,8 @@ class TestImageBotHandleRequest:
         msg.add_reaction.side_effect = add_reaction_side_effect
         with patch("modules.image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
-        # 例外が伝播せず、生成ロックが解除されていること
-        assert bot._limiter.is_generating() is False
+        # 例外が伝播せず、カウンタがデクリメントされていること
+        assert bot._limiter.has_active() is False
 
 
 # ── ImageBot: _resolve_output_paths ──────────────────────────────────────────
@@ -408,10 +442,13 @@ class TestImageBotLogging:
         asyncio.run(bot._handle_request(msg))
         assert not log_dir.exists() or len(list(log_dir.glob("*.json"))) == 0
 
-    def test_global_lock_does_not_write_log(self, tmp_path):
+    def test_concurrent_limit_does_not_write_log(self, tmp_path):
+        from modules.rate_limiter import RateLimiter
+
         log_dir = tmp_path / "log"
         bot = self._make_bot_with_log(valid_config(), MagicMock(), tmp_path, log_dir)
-        bot._limiter.set_generating(True)
+        for _ in range(RateLimiter.MAX_CONCURRENT):
+            bot._limiter.increment_active(99999)
         msg = make_message(bot.user, VALID_CONTENT)
         asyncio.run(bot._handle_request(msg))
         assert not log_dir.exists() or len(list(log_dir.glob("*.json"))) == 0
@@ -473,7 +510,7 @@ class TestImageBotShutdown:
         bot._shutdown_time = (3, 0)
         bot.is_closed = MagicMock(return_value=False)
         bot.close = AsyncMock()
-        bot._limiter.set_generating(True)
+        bot._limiter.increment_active(1)
 
         sleep_count = 0
 
@@ -482,7 +519,7 @@ class TestImageBotShutdown:
             sleep_count += 1
             # 2回目の sleep（1秒待ち）で生成完了とみなす
             if sleep_count >= 2:
-                bot._limiter.set_generating(False)
+                bot._limiter.decrement_active(1)
 
         with patch("modules.image_bot.datetime") as mock_dt:
             mock_dt.now.return_value = MagicMock(hour=3, minute=0)

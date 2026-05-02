@@ -87,7 +87,7 @@ class TestLoadConfig:
         "key",
         [
             "rate_limit",
-            "generating",
+            "concurrent_limit",
             "parse_error",
             "execution_error",
             "file_too_large",
@@ -107,7 +107,7 @@ class TestLoadConfig:
         "key",
         [
             "rate_limit",
-            "generating",
+            "concurrent_limit",
             "parse_error",
             "execution_error",
             "file_too_large",

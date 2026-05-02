@@ -35,7 +35,7 @@ comfyui_tools/
       common_lib.py        # ログ書き込み等の共通処理
       const.py             # 定数定義
     log/                   # ログ出力ディレクトリ（自動生成）
-      result_YYYYMMDD_hhmmss.json
+      result_YYYYMMDD_hhmmss_ffffff.json
     test/
       conftest.py
       test_image_bot.py

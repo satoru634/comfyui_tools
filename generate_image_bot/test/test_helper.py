@@ -27,7 +27,7 @@ def valid_config() -> dict:
         },
         "messages": {
             "rate_limit": "あと {remaining_seconds} 秒待ってください。",
-            "generating": "現在生成中です。しばらくお待ちください。",
+            "concurrent_limit": "リクエストが上限に達しています。しばらくお待ちください。",
             "parse_error": "形式が正しくありません: {error}",
             "execution_error": "生成に失敗しました: {error}",
             "file_too_large": "画像が大きすぎます（{size_mb} MB）",

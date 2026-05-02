@@ -115,7 +115,7 @@ class ImageBot(discord.Client):
                 triggered_minute = current_minute
                 self._shutdown_requested = True
                 # 実行中の生成が完了するまで待機してから終了する
-                while self._limiter.is_generating():
+                while self._limiter.has_active():
                     await asyncio.sleep(1)
                 await self.close()
                 return
@@ -134,31 +134,31 @@ class ImageBot(discord.Client):
         await self.process_generation(message, parsed, message.author)
 
     async def process_generation(self, message, parsed: dict, user):
-        """レート制限 → グローバルロック → 生成 の共通フロー。メンション・モーダル両経路で使用。"""
-        # レート制限チェック（パース成功後 / モーダル送信直後に計上）
-        remaining = self._limiter.check_user(user.id)
-        if remaining > 0:
-            secs = math.ceil(remaining)
-            await self._reply_error(
-                message, self._fmt("rate_limit", remaining_seconds=secs)
-            )
+        """レート制限 → 同時リクエスト上限チェック → 生成 の共通フロー。メンション・モーダル両経路で使用。"""
+        # 処理中リクエストがない場合のみレート制限を適用する（並行リクエストはスキップ）
+        if not self._limiter.has_user_active(user.id):
+            remaining = self._limiter.check_user(user.id)
+            if remaining > 0:
+                secs = math.ceil(remaining)
+                await self._reply_error(
+                    message, self._fmt("rate_limit", remaining_seconds=secs)
+                )
+                return
+            self._limiter.record_request(user.id)
+
+        # 同一ユーザーの同時リクエスト上限チェック（上限は MAX_CONCURRENT 件）
+        if self._limiter.check_concurrent(user.id):
+            await self._reply_error(message, self._fmt("concurrent_limit"))
             return
 
-        self._limiter.record_request(user.id)
-
-        # グローバルロックチェック（同時生成は 1 件のみ許可）
-        if self._limiter.is_generating():
-            await self._reply_error(message, self._fmt("generating"))
-            return
-
-        # ロックを取得し、処理中リアクションを付与する
-        self._limiter.set_generating(True)
+        # カウンタをインクリメントし、処理中リアクションを付与する
+        self._limiter.increment_active(user.id)
         await message.add_reaction(self._config["reactions"]["processing"])
         try:
             await self._generate_and_send(message, parsed, user)
         finally:
-            # 成功・失敗を問わず必ずロック解除と処理中リアクションの削除を行う
-            self._limiter.set_generating(False)
+            # 成功・失敗を問わず必ずカウンタのデクリメントと処理中リアクションの削除を行う
+            self._limiter.decrement_active(user.id)
             try:
                 await message.remove_reaction(
                     self._config["reactions"]["processing"], self.user

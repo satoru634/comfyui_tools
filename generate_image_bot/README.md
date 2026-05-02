@@ -12,11 +12,11 @@ Discord から ComfyUI に画像生成を指示し、生成された画像を Di
 - **スラッシュコマンド**（`/gen_image`）によるモーダル入力
 - 画像の向き（`vertical` / `horizontal`）を指定して画像サイズを切り替え（省略時は `run_workflow/config.json` の既定値を使用）
 - ユーザー単位のレート制限（30秒クールダウン）
-- グローバル生成ロック（同時生成は 1 件のみ）
+- 複数ユーザーのリクエストを並行処理（同一ユーザーは最大 4 件まで同時送信可能）
 - 生成結果を Discord に画像添付で返信
 - リアクション絵文字による進捗通知（処理中 / 成功 / エラー）
 - 指定した時刻にボットを自動停止（処理中のリクエストを完了してから終了）
-- リクエスト結果を `log/result_YYYYMMDD_hhmmss.json` に記録
+- リクエスト結果を `log/result_YYYYMMDD_hhmmss_ffffff.json` に記録
 
 ## 必要環境
 
@@ -87,7 +87,7 @@ pip install -r requirements.txt
   },
   "messages": {
     "rate_limit": "リクエストが連続しています。あと {remaining_seconds} 秒待ってから再試行してください。",
-    "generating": "現在他のリクエストを処理中です。しばらくお待ちください。",
+    "concurrent_limit": "リクエストの同時処理上限に達しています。しばらくお待ちください。",
     "parse_error": "メッセージの形式が正しくありません:\n{error}",
     "execution_error": "生成に失敗しました:\n{error}",
     "file_too_large": "画像ファイルが大きすぎます（{size_mb} MB）",
@@ -172,7 +172,7 @@ image_orientation: vertical
 
 ### ログファイル
 
-`log/result_YYYYMMDD_hhmmss.json` に生成試行のログを記録します（成功・失敗ともに）。
+`log/result_YYYYMMDD_hhmmss_ffffff.json` に生成試行のログを記録します（成功・失敗ともに）。
 
 ```json
 {
@@ -217,7 +217,7 @@ generate_image_bot/
     common_lib.py        # ログ書き込み等の共通処理
     const.py             # 定数定義
   log/                   # ログ出力ディレクトリ（自動生成）
-    result_YYYYMMDD_hhmmss.json
+    result_YYYYMMDD_hhmmss_ffffff.json
   test/
     conftest.py
     test_image_bot.py

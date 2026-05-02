@@ -20,7 +20,7 @@ def write_log(
     # ディレクトリが存在しない場合は自動生成する
     log_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now()
-    filename = f"result_{ts.strftime('%Y%m%d_%H%M%S')}.json"
+    filename = f"result_{ts.strftime('%Y%m%d_%H%M%S_%f')}.json"
     data = {
         "status": status,
         "timestamp": ts.isoformat(timespec="seconds"),

@@ -4,7 +4,7 @@
 REACTION_KEYS = ("processing", "success", "error")
 MESSAGE_KEYS = (
     "rate_limit",
-    "generating",
+    "concurrent_limit",
     "parse_error",
     "execution_error",
     "file_too_large",

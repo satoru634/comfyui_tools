@@ -74,7 +74,8 @@ class WorkflowRunner:
     def execute(
         self, loras: list[str], prompts: dict, image_size: dict | None = None
     ) -> list[dict]:
-        """ワークフローを実行し、出力ファイル一覧を返す。エラー時は ValueError を送出。"""
+        """ワークフローを実行し、出力ファイル一覧を返す。エラー時は ValueError を送出。
+        スレッドセーフ: 内部処理はローカル変数で完結し、インスタンス変数は完了後に書き戻す。"""
         self.template_path = None
         self.prompt_id = None
         self.parameters = {}
@@ -89,7 +90,7 @@ class WorkflowRunner:
 
         # LoRA 名の解決。ユーザーが指定した LoRA 名を、config.json に定義された実ファイル名・強度に変換する
         resolved = resolve_loras(loras, self.config["loras"])
-        self.parameters = {
+        parameters = {
             "positive": prompts["positive"],
             "negative": prompts["negative"],
             "loras": resolved,
@@ -98,8 +99,8 @@ class WorkflowRunner:
 
         # ワークフローの構築
         builder = WorkflowBuilder(self._templates_dir)
-        self.template_path = builder.select_template(len(resolved))
-        workflow = builder.load_template(self.template_path)
+        template_path = builder.select_template(len(resolved))
+        workflow = builder.load_template(template_path)
         workflow = builder.apply(
             workflow, prompts, resolved, image_size=effective_image_size
         )
@@ -108,12 +109,17 @@ class WorkflowRunner:
         client = ComfyUIClient(self.config["comfyui_url"])
         client_id = str(uuid.uuid4())
         print(f"ワークフロー送信中: {self.config['comfyui_url']}")
-        self.prompt_id = client.submit(workflow, client_id)
-        print(f"送信完了 prompt_id={self.prompt_id}")
+        prompt_id = client.submit(workflow, client_id)
+        print(f"送信完了 prompt_id={prompt_id}")
         print("実行完了を待機中...")
-        client.monitor(self.prompt_id, client_id)
-        outputs = client.get_outputs(self.prompt_id)
+        client.monitor(prompt_id, client_id)
+        outputs = client.get_outputs(prompt_id)
         print(f"出力ファイル数: {len(outputs)}")
+
+        # run() が result.json 出力に使用するため、完了後にインスタンス変数へ書き戻す
+        self.template_path = template_path
+        self.prompt_id = prompt_id
+        self.parameters = parameters
         return outputs
 
     def run(self, input_path: str, output_path: str) -> None:

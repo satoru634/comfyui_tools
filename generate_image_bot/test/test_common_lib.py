@@ -27,7 +27,7 @@ class TestWriteLog:
         log_dir = tmp_path / "log"
         write_log(log_dir, 123, "user1", _LOG_PARSED, "success", [], None)
         filename = list(log_dir.glob("result_*.json"))[0].name
-        assert re.match(r"result_\d{8}_\d{6}\.json", filename)
+        assert re.match(r"result_\d{8}_\d{6}_\d{6}\.json", filename)
 
     def test_success_content(self, tmp_path):
         log_dir = tmp_path / "log"

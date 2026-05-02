@@ -93,15 +93,17 @@ from run_workflow import WorkflowRunner
 runner = WorkflowRunner("config.json")
 
 # image_size を指定する場合
-runner.execute(
+outputs = runner.execute(
     ["my_lora"],
     {"positive": "...", "negative": "..."},
     image_size={"width": 768, "height": 1024},
 )
 
 # image_size を省略する場合（config.json の default_image_size を使用）
-runner.execute(["my_lora"], {"positive": "...", "negative": "..."})
+outputs = runner.execute(["my_lora"], {"positive": "...", "negative": "..."})
 ```
+
+`execute()` はスレッドセーフです。複数スレッドから同一インスタンスを同時呼び出しできます。
 
 ## 出力
 
@@ -112,6 +114,7 @@ runner.execute(["my_lora"], {"positive": "...", "negative": "..."})
   "status": "success",
   "prompt_id": "abc123",
   "timestamp": "2026-04-25T12:00:00",
+  "template": "templates/template_lora_1.json",
   "parameters": {
     "positive": "masterpiece, best quality, 1girl ...",
     "negative": "worst quality, bad quality ...",
@@ -128,7 +131,7 @@ runner.execute(["my_lora"], {"positive": "...", "negative": "..."})
 ## テスト
 
 ```bash
-python -m pytest test/ -v
+python -m pytest test/
 ```
 
 ## テンプレートについて
