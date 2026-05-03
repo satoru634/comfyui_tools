@@ -50,7 +50,9 @@ def make_bot_for_test(config: dict, runner, output_dir=None) -> ImageBot:
         bot = ImageBot(config, runner)
     # discord.Client.user は _connection.user を参照するため両方設定する
     bot._connection = MagicMock()
-    bot._connection.user = MagicMock(name="bot_user")
+    bot._connection.user = MagicMock()
+    bot._connection.user.id = 12345
+    bot._connection.user.name = "TestBot"
     return bot
 
 
@@ -59,15 +61,21 @@ def make_message(bot_user, content: str, guild_set: bool = True, is_own: bool = 
     if is_own:
         msg.author = bot_user
     else:
-        msg.author = MagicMock(id=99999)
+        msg.author = MagicMock()
+        msg.author.id = 99999
         msg.author.name = "testuser"
     msg.content = content
-    msg.guild = MagicMock() if guild_set else None
+    if guild_set:
+        msg.guild = MagicMock()
+        msg.guild.id = 222
+    else:
+        msg.guild = None
     msg.mentions = [bot_user]
     msg.add_reaction = AsyncMock()
     msg.remove_reaction = AsyncMock()
     msg.reply = AsyncMock()
     msg.channel = MagicMock()
+    msg.channel.id = 111
     msg.channel.send = AsyncMock()
     return msg
 

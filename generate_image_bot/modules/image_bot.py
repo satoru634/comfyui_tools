@@ -8,7 +8,7 @@ from pathlib import Path
 
 import discord
 
-from modules.common_lib import write_log
+from modules.common_lib import write_log, write_system_log, write_discord_log
 from modules.load_config import parse_shutdown_time
 from modules.message_parser import MessageParser
 from modules.gen_image_modal import GenImageModal
@@ -56,6 +56,12 @@ class ImageBot(discord.Client):
         )
         # シャットダウン要求フラグ（True になると新規リクエストを受け付けない）
         self._shutdown_requested = False
+        # シャットダウン理由（on_close でログに記録する）
+        self._shutdown_reason = "signal"
+
+    @property
+    def log_dir(self) -> Path:
+        return self._log_dir
 
     async def setup_hook(self):
         """on_ready より前に呼び出される初期化フック。スラッシュコマンドを登録する。"""
@@ -66,8 +72,14 @@ class ImageBot(discord.Client):
         await self.tree.sync()
 
     async def on_ready(self):
-        """ボット起動後の処理。シャットダウン時刻が設定されている場合はウォッチャーを起動する。"""
+        """ボット起動後の処理。Discord 接続完了ログを書き出し、シャットダウンウォッチャーを起動する。"""
         print(f"ボット起動: {self.user}")
+        write_discord_log(
+            self._log_dir,
+            "discord_ready",
+            bot_user_id=self.user.id,
+            bot_username=self.user.name,
+        )
         if self._shutdown_time is not None:
             h, m = self._shutdown_time
             print(f"停止時刻: {h:02d}:{m:02d}")
@@ -83,6 +95,14 @@ class ImageBot(discord.Client):
             return
         if self.user not in message.mentions:
             return
+        write_discord_log(
+            self._log_dir,
+            "discord_message",
+            user_id=message.author.id,
+            username=message.author.name,
+            channel_id=message.channel.id,
+            guild_id=message.guild.id,
+        )
         await self._handle_request(message)
 
     async def _gen_image_command(self, interaction: discord.Interaction):
@@ -97,6 +117,14 @@ class ImageBot(discord.Client):
                 self._fmt("shutdown_in_progress"), ephemeral=True
             )
             return
+        write_discord_log(
+            self._log_dir,
+            "discord_slash_command",
+            user_id=interaction.user.id,
+            username=interaction.user.name,
+            channel_id=interaction.channel_id,
+            guild_id=interaction.guild.id,
+        )
         await interaction.response.send_modal(GenImageModal(self))
 
     async def _shutdown_watcher(self):
@@ -114,6 +142,7 @@ class ImageBot(discord.Client):
             ):
                 triggered_minute = current_minute
                 self._shutdown_requested = True
+                self._shutdown_reason = "scheduled"
                 # 実行中の生成が完了するまで待機してから終了する
                 while self._limiter.has_active():
                     await asyncio.sleep(1)

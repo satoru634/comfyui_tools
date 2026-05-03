@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 
 from modules.image_bot import ImageBot
+from modules.common_lib import write_system_log, write_discord_log
 
 from test_helper import (
     valid_config,
@@ -355,7 +356,7 @@ class TestImageBotLogging:
         msg = make_message(bot.user, VALID_CONTENT)
         with patch("modules.image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
-        files = list(log_dir.glob("result_*.json"))
+        files = list(log_dir.glob("*/result_*.json"))
         assert len(files) == 1
         data = json.loads(files[0].read_text(encoding="utf-8"))
         assert data["status"] == "success"
@@ -374,7 +375,7 @@ class TestImageBotLogging:
         msg = make_message(bot.user, content)
         with patch("modules.image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
-        data = json.loads(list(log_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
+        data = json.loads(list(log_dir.glob("*/*.json"))[0].read_text(encoding="utf-8"))
         assert data["image_orientation"] == "vertical"
 
     def test_success_log_image_orientation_null_when_omitted(self, tmp_path):
@@ -386,7 +387,7 @@ class TestImageBotLogging:
         msg = make_message(bot.user, VALID_CONTENT)
         with patch("modules.image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
-        data = json.loads(list(log_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
+        data = json.loads(list(log_dir.glob("*/*.json"))[0].read_text(encoding="utf-8"))
         assert data["image_orientation"] is None
 
     def test_success_log_contains_user_info(self, tmp_path):
@@ -398,7 +399,7 @@ class TestImageBotLogging:
         msg = make_message(bot.user, VALID_CONTENT)
         with patch("modules.image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
-        data = json.loads(list(log_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
+        data = json.loads(list(log_dir.glob("*/*.json"))[0].read_text(encoding="utf-8"))
         assert data["user_id"] == 99999
         assert data["username"] == "testuser"
 
@@ -409,7 +410,7 @@ class TestImageBotLogging:
         bot = self._make_bot_with_log(valid_config(), runner, tmp_path, log_dir)
         msg = make_message(bot.user, VALID_CONTENT)
         asyncio.run(bot._handle_request(msg))
-        files = list(log_dir.glob("result_*.json"))
+        files = list(log_dir.glob("*/result_*.json"))
         assert len(files) == 1
         data = json.loads(files[0].read_text(encoding="utf-8"))
         assert data["status"] == "error"
@@ -422,7 +423,7 @@ class TestImageBotLogging:
         bot = self._make_bot_with_log(valid_config(), runner, tmp_path, log_dir)
         msg = make_message(bot.user, VALID_CONTENT)
         asyncio.run(bot._handle_request(msg))
-        files = list(log_dir.glob("result_*.json"))
+        files = list(log_dir.glob("*/result_*.json"))
         assert len(files) == 1
         data = json.loads(files[0].read_text(encoding="utf-8"))
         assert data["status"] == "error"
@@ -432,7 +433,7 @@ class TestImageBotLogging:
         bot = self._make_bot_with_log(valid_config(), MagicMock(), tmp_path, log_dir)
         msg = make_message(bot.user, "<@1>")  # positive / negative 欠落
         asyncio.run(bot._handle_request(msg))
-        assert not log_dir.exists() or len(list(log_dir.glob("*.json"))) == 0
+        assert not log_dir.exists() or len(list(log_dir.glob("*/*.json"))) == 0
 
     def test_rate_limit_does_not_write_log(self, tmp_path):
         log_dir = tmp_path / "log"
@@ -440,7 +441,7 @@ class TestImageBotLogging:
         bot._limiter.record_request(99999)
         msg = make_message(bot.user, VALID_CONTENT)
         asyncio.run(bot._handle_request(msg))
-        assert not log_dir.exists() or len(list(log_dir.glob("*.json"))) == 0
+        assert not log_dir.exists() or len(list(log_dir.glob("*/*.json"))) == 0
 
     def test_concurrent_limit_does_not_write_log(self, tmp_path):
         from modules.rate_limiter import RateLimiter
@@ -451,7 +452,7 @@ class TestImageBotLogging:
             bot._limiter.increment_active(99999)
         msg = make_message(bot.user, VALID_CONTENT)
         asyncio.run(bot._handle_request(msg))
-        assert not log_dir.exists() or len(list(log_dir.glob("*.json"))) == 0
+        assert not log_dir.exists() or len(list(log_dir.glob("*/*.json"))) == 0
 
 
 # ── ImageBot: シャットダウン ──────────────────────────────────────────────────
@@ -551,7 +552,15 @@ class TestImageBotShutdown:
 class TestImageBotSlashCommand:
     def _make_interaction(self, guild_set: bool = True):
         interaction = MagicMock()
-        interaction.guild = MagicMock() if guild_set else None
+        if guild_set:
+            interaction.guild = MagicMock()
+            interaction.guild.id = 222
+        else:
+            interaction.guild = None
+        interaction.user = MagicMock()
+        interaction.user.id = 12345
+        interaction.user.name = "test_slash_user"
+        interaction.channel_id = 111
         interaction.response.send_message = AsyncMock()
         interaction.response.send_modal = AsyncMock()
         return interaction
@@ -602,3 +611,116 @@ class TestImageBotSlashCommand:
         with patch("modules.image_bot.GenImageModal"):
             asyncio.run(bot._gen_image_command(interaction))
         interaction.response.send_message.assert_not_called()
+
+
+# ── ImageBot: Discord ログ ────────────────────────────────────────────────────
+
+
+class TestImageBotDiscordLogging:
+    def test_on_ready_writes_discord_ready_log(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._log_dir = tmp_path / "log"
+        asyncio.run(bot.on_ready())
+        files = list(bot._log_dir.glob("*/discord_*.json"))
+        assert len(files) == 1
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+        assert data["type"] == "discord_ready"
+        assert "bot_user_id" in data
+        assert "bot_username" in data
+
+    def test_on_message_writes_discord_message_log(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        bot._log_dir = tmp_path / "log"
+        msg = make_message(bot.user, VALID_CONTENT)
+        msg.channel.id = 111
+        msg.guild.id = 222
+        with patch("modules.image_bot.discord.File"):
+            asyncio.run(bot.on_message(msg))
+        files = list(bot._log_dir.glob("*/discord_*.json"))
+        assert len(files) == 1
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+        assert data["type"] == "discord_message"
+        assert data["user_id"] == 99999
+        assert data["username"] == "testuser"
+        assert data["channel_id"] == 111
+        assert data["guild_id"] == 222
+
+    def test_on_message_own_message_does_not_write_log(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._log_dir = tmp_path / "log"
+        msg = make_message(bot.user, VALID_CONTENT, is_own=True)
+        asyncio.run(bot.on_message(msg))
+        assert (
+            not bot._log_dir.exists()
+            or len(list(bot._log_dir.glob("*/discord_*.json"))) == 0
+        )
+
+    def test_on_message_dm_does_not_write_log(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._log_dir = tmp_path / "log"
+        msg = make_message(bot.user, VALID_CONTENT, guild_set=False)
+        asyncio.run(bot.on_message(msg))
+        assert (
+            not bot._log_dir.exists()
+            or len(list(bot._log_dir.glob("*/discord_*.json"))) == 0
+        )
+
+    def test_gen_image_command_writes_discord_slash_command_log(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._log_dir = tmp_path / "log"
+        interaction = MagicMock()
+        interaction.guild = MagicMock()
+        interaction.guild.id = 222
+        interaction.user = MagicMock()
+        interaction.user.id = 777
+        interaction.user.name = "slash_user"
+        interaction.channel_id = 333
+        interaction.response.send_message = AsyncMock()
+        interaction.response.send_modal = AsyncMock()
+        with patch("modules.image_bot.GenImageModal"):
+            asyncio.run(bot._gen_image_command(interaction))
+        files = list(bot._log_dir.glob("*/discord_*.json"))
+        assert len(files) == 1
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+        assert data["type"] == "discord_slash_command"
+        assert data["user_id"] == 777
+        assert data["username"] == "slash_user"
+        assert data["channel_id"] == 333
+        assert data["guild_id"] == 222
+
+    def test_gen_image_command_dm_does_not_write_log(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._log_dir = tmp_path / "log"
+        interaction = MagicMock()
+        interaction.guild = None
+        interaction.response.send_message = AsyncMock()
+        asyncio.run(bot._gen_image_command(interaction))
+        assert (
+            not bot._log_dir.exists()
+            or len(list(bot._log_dir.glob("*/discord_*.json"))) == 0
+        )
+
+
+# ── ImageBot: _shutdown_reason ────────────────────────────────────────────────
+
+
+class TestImageBotShutdownReason:
+    def test_default_shutdown_reason_is_signal(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        assert bot._shutdown_reason == "signal"
+
+    def test_shutdown_watcher_sets_scheduled_reason(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._shutdown_time = (3, 0)
+        bot.is_closed = MagicMock(return_value=False)
+        bot.close = AsyncMock()
+
+        with patch("modules.image_bot.datetime") as mock_dt:
+            mock_dt.now.return_value = MagicMock(hour=3, minute=0)
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                asyncio.run(bot._shutdown_watcher())
+
+        assert bot._shutdown_reason == "scheduled"

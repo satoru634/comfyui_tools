@@ -9,6 +9,7 @@ import aiohttp
 from modules.const import RECONNECT_WAIT
 from modules.load_config import load_config
 from modules.image_bot import ImageBot
+from modules.common_lib import write_system_log
 
 
 def main():
@@ -24,9 +25,14 @@ def main():
     args = parser.parse_args()
     config = load_config(args.config)
     while True:
+        bot = ImageBot(config)
+        write_system_log(
+            bot.log_dir,
+            "startup",
+            shutdown_time=config.get("shutdown_time"),
+        )
         try:
-            ImageBot(config).run(config["discord_token"])
-            break  # shutdown_watcher による正常終了
+            bot.run(config["discord_token"])
         except aiohttp.WSServerHandshakeError as e:
             # Discord ゲートウェイが HTTP 520 等を返した場合は待機後に再接続する
             print(
@@ -34,6 +40,10 @@ def main():
                 f"{RECONNECT_WAIT}秒後に再接続します..."
             )
             time.sleep(RECONNECT_WAIT)
+        else:
+            # 正常終了（定刻シャットダウン・Ctrl+C）: 終了ログを書いてループを抜ける
+            write_system_log(bot.log_dir, "shutdown", reason=bot._shutdown_reason)
+            break
 
 
 if __name__ == "__main__":
