@@ -4,7 +4,7 @@ Discord から ComfyUI に画像生成を指示し、生成された画像を Di
 
 内部で `run_workflow` の `WorkflowRunner` を使用して画像生成を実行します。
 
-リクエスト結果（出力ファイル情報・エラー情報）は `log/` ディレクトリに記録されます。
+ボットの動作記録（起動・終了・Discord イベント・画像生成結果）は `log/YYYYMMDD/` ディレクトリに JSON 形式で記録されます。
 
 ## 機能
 
@@ -16,7 +16,7 @@ Discord から ComfyUI に画像生成を指示し、生成された画像を Di
 - 生成結果を Discord に画像添付で返信
 - リアクション絵文字による進捗通知（処理中 / 成功 / エラー）
 - 指定した時刻にボットを自動停止（処理中のリクエストを完了してから終了）
-- リクエスト結果を `log/result_YYYYMMDD_hhmmss_ffffff.json` に記録
+- ボット起動・終了・Discord イベント・画像生成結果を `log/YYYYMMDD/` 配下に JSON で記録
 
 ## 必要環境
 
@@ -172,7 +172,15 @@ image_orientation: vertical
 
 ### ログファイル
 
-`log/result_YYYYMMDD_hhmmss_ffffff.json` に生成試行のログを記録します（成功・失敗ともに）。
+`log/YYYYMMDD/` 配下に日付ごとのサブディレクトリを作成して以下の 3 種類のログを記録します。
+
+| ファイル名 | 出力契機 |
+|---|---|
+| `result_hhmmss_ffffff.json` | 画像生成を試みた際（成功・失敗ともに） |
+| `system_hhmmss_ffffff.json` | ボット起動・終了時 |
+| `discord_hhmmss_ffffff.json` | Discord 接続完了・メンション受信・スラッシュコマンド受信時 |
+
+**生成ログの例:**
 
 ```json
 {
@@ -188,6 +196,16 @@ image_orientation: vertical
     {"filename": "ComfyUI_00001_.png", "subfolder": "", "type": "output"}
   ],
   "error": null
+}
+```
+
+**システムログの例（起動時）:**
+
+```json
+{
+  "type": "startup",
+  "timestamp": "2026-04-25T12:34:56",
+  "shutdown_time": "03:00"
 }
 ```
 
@@ -217,7 +235,10 @@ generate_image_bot/
     common_lib.py        # ログ書き込み等の共通処理
     const.py             # 定数定義
   log/                   # ログ出力ディレクトリ（自動生成）
-    result_YYYYMMDD_hhmmss_ffffff.json
+    YYYYMMDD/            # 日付ディレクトリ（自動生成）
+      result_hhmmss_ffffff.json
+      system_hhmmss_ffffff.json
+      discord_hhmmss_ffffff.json
   test/
     conftest.py
     test_image_bot.py
