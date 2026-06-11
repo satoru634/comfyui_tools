@@ -205,6 +205,10 @@ python run_workflow.py --input input.json --output result.json
 | テンプレートに `empty_latent_image` ノードが見つからない | result.json にエラー記録して終了 |
 | ComfyUI 側のワークフロー実行エラー | result.json にエラー記録して終了 |
 
+## WD14 Tagger 機能
+
+[WD14 Tagger 機能仕様書](./SPEC/wd14_tagger.md)を参照。
+
 ## 開発ルール
 
 - `config.json` に統合できるものは別ファイルを作らない。

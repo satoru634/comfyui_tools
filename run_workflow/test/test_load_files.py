@@ -6,11 +6,13 @@ from test_helper import (
     write_json,
     valid_input,
     valid_config,
+    valid_wd14_tagger_config,
 )
 
 from modules.load_files import (
     load_config,
     validate_inputs,
+    validate_wd14_tagger_config,
     load_and_validate_input,
     IMAGE_SIZE_MAX,
     IMAGE_SIZE_MIN,
@@ -298,3 +300,59 @@ class TestLoadConfig:
         )
         with pytest.raises(ValueError, match="default_image_size が不正です"):
             load_config(path)
+
+
+# ── validate_wd14_tagger_config ───────────────────────────────────────────────
+
+
+class TestValidateWd14TaggerConfig:
+    def _make_config(self, **overrides) -> dict:
+        return {**valid_config(), "wd14_tagger": valid_wd14_tagger_config(**overrides)}
+
+    def test_valid(self):
+        validate_wd14_tagger_config(self._make_config())
+
+    def test_missing_wd14_tagger_key(self):
+        with pytest.raises(ValueError, match="'wd14_tagger' キーがありません"):
+            validate_wd14_tagger_config(valid_config())
+
+    def test_wd14_tagger_not_dict(self):
+        config = {**valid_config(), "wd14_tagger": "invalid"}
+        with pytest.raises(ValueError, match="オブジェクト形式"):
+            validate_wd14_tagger_config(config)
+
+    def test_missing_model_name(self):
+        config = self._make_config()
+        del config["wd14_tagger"]["model_name"]
+        with pytest.raises(ValueError, match="model_name"):
+            validate_wd14_tagger_config(config)
+
+    def test_empty_model_name(self):
+        with pytest.raises(ValueError, match="model_name"):
+            validate_wd14_tagger_config(self._make_config(model_name=""))
+
+    def test_missing_general_threshold(self):
+        config = self._make_config()
+        del config["wd14_tagger"]["general_threshold"]
+        with pytest.raises(ValueError, match="general_threshold"):
+            validate_wd14_tagger_config(config)
+
+    def test_missing_character_threshold(self):
+        config = self._make_config()
+        del config["wd14_tagger"]["character_threshold"]
+        with pytest.raises(ValueError, match="character_threshold"):
+            validate_wd14_tagger_config(config)
+
+    def test_threshold_out_of_range(self):
+        with pytest.raises(ValueError, match="0.0〜1.0"):
+            validate_wd14_tagger_config(self._make_config(general_threshold=1.5))
+
+    def test_threshold_is_bool(self):
+        with pytest.raises(ValueError, match="数値"):
+            validate_wd14_tagger_config(self._make_config(general_threshold=True))
+
+    def test_threshold_boundary_zero(self):
+        validate_wd14_tagger_config(self._make_config(general_threshold=0.0))
+
+    def test_threshold_boundary_one(self):
+        validate_wd14_tagger_config(self._make_config(general_threshold=1.0))

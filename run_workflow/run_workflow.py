@@ -14,6 +14,7 @@ from modules.load_files import (
     validate_inputs,
     load_and_validate_input,
 )
+from modules.wd14_tagger_runner import Wd14TaggerRunner
 
 # ── 結果出力 ──────────────────────────────────────────────────────────────────
 
@@ -157,9 +158,34 @@ class WorkflowRunner:
 # ── エントリポイント ──────────────────────────────────────────────────────────
 
 
+def _run_tagger(config_path: str, image_path: str) -> None:
+    """WD14 Tagger モードでタグ付けを実行し、結果を stdout に出力する。"""
+    try:
+        with open(image_path, "rb") as f:
+            image_data = f.read()
+        tags = Wd14TaggerRunner(config_path).tag(image_data, Path(image_path).name)
+        print(tags)
+    except (OSError, ValueError) as e:
+        print(f"エラー: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="ComfyUI ワークフロー自動実行")
-    parser.add_argument("-i", "--input", required=True, help="入力 JSON ファイルのパス")
+    parser.add_argument(
+        "-t",
+        "--tag",
+        action="store_true",
+        help="WD14 Tagger モードで実行する（--image と併用）",
+    )
+    parser.add_argument(
+        "-g",
+        "--image",
+        help="タグ付け対象の画像ファイルパス（--tag 使用時に必須）",
+    )
+    parser.add_argument(
+        "-i", "--input", help="入力 JSON ファイルのパス（--tag 未指定時に必須）"
+    )
     default_output = f"result_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.json"
     parser.add_argument(
         "-o",
@@ -175,7 +201,14 @@ def main():
     )
     args = parser.parse_args()
 
-    WorkflowRunner(args.config).run(args.input, args.output)
+    if args.tag:
+        if not args.image:
+            parser.error("--tag を指定する場合は --image が必須です")
+        _run_tagger(args.config, args.image)
+    else:
+        if not args.input:
+            parser.error("--tag を指定しない場合は --input が必須です")
+        WorkflowRunner(args.config).run(args.input, args.output)
 
 
 if __name__ == "__main__":

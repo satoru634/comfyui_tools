@@ -53,6 +53,37 @@ def _validate_lora_entries(loras: dict) -> None:
             )
 
 
+def validate_wd14_tagger_config(config: dict) -> None:
+    """config["wd14_tagger"] セクションを検証する。問題があれば ValueError を送出する。"""
+    if "wd14_tagger" not in config:
+        raise ValueError("config.json に 'wd14_tagger' キーがありません")
+    wd14 = config["wd14_tagger"]
+    if not isinstance(wd14, dict):
+        raise ValueError(
+            "config.json の 'wd14_tagger' はオブジェクト形式である必要があります"
+        )
+    if (
+        "model_name" not in wd14
+        or not isinstance(wd14["model_name"], str)
+        or not wd14["model_name"].strip()
+    ):
+        raise ValueError(
+            "config.json の 'wd14_tagger.model_name' は空でない文字列である必要があります"
+        )
+    for key in ("general_threshold", "character_threshold"):
+        if key not in wd14:
+            raise ValueError(f"config.json に 'wd14_tagger.{key}' キーがありません")
+        val = wd14[key]
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            raise ValueError(
+                f"config.json の 'wd14_tagger.{key}' は数値である必要があります"
+            )
+        if not (0.0 <= val <= 1.0):
+            raise ValueError(
+                f"config.json の 'wd14_tagger.{key}' は 0.0〜1.0 の範囲で指定してください（指定値: {val}）"
+            )
+
+
 def load_config(config_path: str) -> dict:
     """config.json を読み込んで内容を検証する。問題があれば ValueError を送出する。"""
     try:

@@ -16,6 +16,7 @@ from run_workflow import (
     resolve_loras,
     write_result,
     WorkflowRunner,
+    _run_tagger,
 )
 
 from modules.load_files import (
@@ -284,3 +285,46 @@ class TestWriteResult:
         assert result["prompt_id"] == "abc123"
         assert result["template"] == ".templates/template_lora_0.json"
         assert result["outputs"] == outputs
+
+
+# ── _run_tagger ───────────────────────────────────────────────────────────────
+
+
+class TestRunTagger:
+    def _mock_runner(self, tags: str) -> MagicMock:
+        mock = MagicMock()
+        mock.tag.return_value = tags
+        return mock
+
+    def test_prints_tags(self, tmp_path, capsys):
+        image_path = tmp_path / "photo.jpg"
+        image_path.write_bytes(b"fake_image")
+        with patch(
+            "run_workflow.Wd14TaggerRunner",
+            return_value=self._mock_runner("1girl, solo"),
+        ):
+            _run_tagger("config.json", str(image_path))
+        assert capsys.readouterr().out.strip() == "1girl, solo"
+
+    def test_passes_image_filename_to_tag(self, tmp_path):
+        image_path = tmp_path / "photo.jpg"
+        image_path.write_bytes(b"fake_image")
+        mock_runner = self._mock_runner("1girl")
+        with patch("run_workflow.Wd14TaggerRunner", return_value=mock_runner):
+            _run_tagger("config.json", str(image_path))
+        mock_runner.tag.assert_called_once_with(b"fake_image", "photo.jpg")
+
+    def test_exits_on_value_error(self, tmp_path):
+        image_path = tmp_path / "photo.jpg"
+        image_path.write_bytes(b"fake_image")
+        mock_runner = MagicMock()
+        mock_runner.tag.side_effect = ValueError("接続エラー")
+        with patch("run_workflow.Wd14TaggerRunner", return_value=mock_runner):
+            with pytest.raises(SystemExit) as exc_info:
+                _run_tagger("config.json", str(image_path))
+        assert exc_info.value.code == 1
+
+    def test_exits_on_file_not_found(self, tmp_path):
+        with pytest.raises(SystemExit) as exc_info:
+            _run_tagger("config.json", str(tmp_path / "nonexistent.jpg"))
+        assert exc_info.value.code == 1

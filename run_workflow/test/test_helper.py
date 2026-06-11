@@ -95,3 +95,37 @@ def make_loras(count: int) -> list[dict]:
 
 def make_ws_message(**kwargs) -> str:
     return json.dumps(kwargs)
+
+
+def valid_wd14_tagger_config(**overrides) -> dict:
+    base = {
+        "model_name": "wd-eva02-large-tagger-v3",
+        "general_threshold": 0.35,
+        "character_threshold": 0.85,
+    }
+    base.update(overrides)
+    return base
+
+
+def make_wd14_workflow() -> dict:
+    return {
+        "1": {
+            "inputs": {
+                "model_name": "wd-eva02-large-tagger-v3",
+                "general_threshold": 0.35,
+                "character_threshold": 1,
+            },
+            "class_type": "WDTimmTagger",
+            "_meta": {"title": "WD Timm Tagger"},
+        },
+        "2": {
+            "inputs": {"image": "test.jpg"},
+            "class_type": "LoadImage",
+            "_meta": {"title": "画像を読み込む"},
+        },
+        "3": {
+            "inputs": {"source": ["1", 0]},
+            "class_type": "PreviewAny",
+            "_meta": {"title": "プレビュー任意"},
+        },
+    }
