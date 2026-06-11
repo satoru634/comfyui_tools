@@ -2,6 +2,32 @@
 
 ComfyUI 関連の Python ユーティリティ集。各ツールはサブディレクトリとして独立しています。
 
+## セットアップ
+
+`setup/` ディレクトリにある初期化スクリプトを実行すると、仮想環境の作成と依存ライブラリのインストールが行われます。
+
+**Windows:**
+```bat
+setup\setup_venv.bat
+```
+
+**Linux / macOS:**
+```bash
+bash setup/setup_venv.sh
+```
+
+実行後、以下のコマンドで仮想環境をアクティベートしてください。
+
+**Windows:**
+```bat
+.venv\Scripts\activate
+```
+
+**Linux / macOS:**
+```bash
+source .venv/bin/activate
+```
+
 ## ツール一覧
 
 | ツール | 説明 |
