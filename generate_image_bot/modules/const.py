@@ -11,6 +11,10 @@ MESSAGE_KEYS = (
     "unexpected_error",
     "dm_not_supported",
     "shutdown_in_progress",
+    "tag_image_invalid_type",
+    "tag_image_error",
+    "tag_image_invalid_format",
+    "tag_image_resolution_too_large",
 )
 
 # 10MB: Discord の添付ファイル上限に合わせた閾値

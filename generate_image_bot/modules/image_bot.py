@@ -1,12 +1,21 @@
 """Discord ボット: 画像生成ボットの実装"""
 
 import asyncio
+import io
 import math
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
 
 import discord
+from PIL import Image as PILImage
+
+PILImage.MAX_IMAGE_PIXELS = 50_000_000
+
+_ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "BMP"}
+_MAX_IMAGE_DIMENSION = 4096
+_FORMAT_EXT = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp", "GIF": "gif", "BMP": "bmp"}
 
 from modules.common_lib import write_log, write_system_log, write_discord_log
 from modules.load_config import parse_shutdown_time
@@ -27,17 +36,41 @@ for _k in list(_bot_modules):
     del sys.modules[_k]
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "run_workflow"))
 from run_workflow import WorkflowRunner  # noqa: E402
+from modules.wd14_tagger_runner import Wd14TaggerRunner  # noqa: E402
 
 sys.modules.update(_bot_modules)
 del _bot_modules
+
+# ── 画像検証ヘルパー ───────────────────────────────────────────────────────────
+
+
+def _validate_image_data(image_data: bytes) -> str:
+    """Pillow で画像データを検証し、フォーマット名を返す。不正な場合は ValueError を送出。"""
+    try:
+        img = PILImage.open(io.BytesIO(image_data))
+        img.load()
+    except Exception:
+        raise ValueError("tag_image_invalid_format")
+    if img.format not in _ALLOWED_IMAGE_FORMATS:
+        raise ValueError("tag_image_invalid_format")
+    if img.width > _MAX_IMAGE_DIMENSION or img.height > _MAX_IMAGE_DIMENSION:
+        raise ValueError("tag_image_resolution_too_large")
+    return img.format
+
+
+def _make_safe_filename(image_format: str) -> str:
+    """タイムスタンプを基にした UUID でファイル名を生成する。"""
+    ext = _FORMAT_EXT.get(image_format, "bin")
+    return f"{uuid.uuid1()}.{ext}"
+
 
 # ── Discord ボット ─────────────────────────────────────────────────────────────
 
 
 class ImageBot(discord.Client):
-    def __init__(self, config: dict, runner=None):
+    def __init__(self, config: dict, runner=None, wd14_runner=None):
         """設定を受け取り、各コンポーネントを初期化する。
-        runner を省略すると config の run_workflow_config から WorkflowRunner を生成する。"""
+        runner / wd14_runner を省略すると run_workflow_config から各 Runner を生成する。"""
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents)
@@ -49,6 +82,7 @@ class ImageBot(discord.Client):
         # ログディレクトリは generate_image_bot/ 直下の log/ に固定する
         self._log_dir = Path(__file__).parent.parent / "log"
         self._runner = runner or WorkflowRunner(config["run_workflow_config"])
+        self._wd14_runner = wd14_runner or Wd14TaggerRunner(config["run_workflow_config"])
         # shutdown_time が設定されている場合はタプル (hour, minute) で保持する
         st = config.get("shutdown_time")
         self._shutdown_time: tuple[int, int] | None = (
@@ -68,6 +102,9 @@ class ImageBot(discord.Client):
         self.tree = discord.app_commands.CommandTree(self)
         self.tree.command(name="gen_image", description="ComfyUI で画像を生成します")(
             self._gen_image_command
+        )
+        self.tree.command(name="tag_image", description="画像のタグを取得します")(
+            self._tag_image_command
         )
         await self.tree.sync()
 
@@ -126,6 +163,104 @@ class ImageBot(discord.Client):
             guild_id=interaction.guild.id,
         )
         await interaction.response.send_modal(GenImageModal(self))
+
+    async def _tag_image_command(
+        self, interaction: discord.Interaction, image: discord.Attachment
+    ) -> None:
+        """/tag_image コマンド: DM・シャットダウン・MIME・サイズを検証し、タグ付け処理へ渡す。"""
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                self._fmt("dm_not_supported"), ephemeral=True
+            )
+            return
+        if self._shutdown_requested:
+            await interaction.response.send_message(
+                self._fmt("shutdown_in_progress"), ephemeral=True
+            )
+            return
+        if not image.content_type or not image.content_type.startswith("image/"):
+            await interaction.response.send_message(
+                self._fmt("tag_image_invalid_type"), ephemeral=True
+            )
+            return
+        if image.size >= MAX_FILE_SIZE:
+            await interaction.response.send_message(
+                self._fmt("file_too_large", size_mb=f"{image.size / (1024 * 1024):.1f}"),
+                ephemeral=True,
+            )
+            return
+        image_data = await image.read()
+        try:
+            image_format = await asyncio.to_thread(_validate_image_data, image_data)
+        except ValueError as e:
+            await interaction.response.send_message(
+                self._fmt(str(e)), ephemeral=True
+            )
+            return
+        safe_filename = _make_safe_filename(image_format)
+        write_discord_log(
+            self._log_dir,
+            "discord_slash_command",
+            user_id=interaction.user.id,
+            username=interaction.user.name,
+            channel_id=interaction.channel_id,
+            guild_id=interaction.guild.id,
+        )
+        await self._process_tagging(interaction, image_data, safe_filename)
+
+    async def _process_tagging(
+        self,
+        interaction: discord.Interaction,
+        image_data: bytes,
+        safe_filename: str,
+    ) -> None:
+        """レート制限 → 同時リクエスト上限チェック → タグ付け の共通フロー。"""
+        user = interaction.user
+        if not self._limiter.has_user_active(user.id):
+            remaining = self._limiter.check_user(user.id)
+            if remaining > 0:
+                secs = math.ceil(remaining)
+                await interaction.response.send_message(
+                    self._fmt("rate_limit", remaining_seconds=secs)
+                )
+                msg = await interaction.original_response()
+                await msg.add_reaction(self._config["reactions"]["error"])
+                return
+            self._limiter.record_request(user.id)
+        if self._limiter.check_concurrent(user.id):
+            await interaction.response.send_message(self._fmt("concurrent_limit"))
+            msg = await interaction.original_response()
+            await msg.add_reaction(self._config["reactions"]["error"])
+            return
+        self._limiter.increment_active(user.id)
+        await interaction.response.send_message("⏳ タグ付け中...")
+        message = await interaction.original_response()
+        await message.add_reaction(self._config["reactions"]["processing"])
+        try:
+            try:
+                tags = await asyncio.to_thread(
+                    self._wd14_runner.tag, image_data, safe_filename
+                )
+            except ValueError as e:
+                await self._reply_error(message, self._fmt("tag_image_error", error=str(e)))
+                return
+            except Exception:
+                await self._reply_error(message, self._fmt("unexpected_error"))
+                return
+            file = discord.File(io.BytesIO(image_data), filename=safe_filename)
+            await message.reply(tags, file=file)
+            try:
+                await message.add_reaction(self._config["reactions"]["success"])
+            except discord.HTTPException:
+                pass
+        finally:
+            self._limiter.decrement_active(user.id)
+            try:
+                await message.remove_reaction(
+                    self._config["reactions"]["processing"], self.user
+                )
+            except discord.HTTPException:
+                pass
 
     async def _shutdown_watcher(self):
         """30秒ごとに現在時刻を確認し、停止時刻に達したらシャットダウンを開始する。

@@ -34,6 +34,10 @@ def valid_config() -> dict:
             "unexpected_error": "予期しないエラーが発生しました",
             "dm_not_supported": "DM からは使用できません。",
             "shutdown_in_progress": "シャットダウン中です。",
+            "tag_image_invalid_type": "画像ファイルのみ対応しています。",
+            "tag_image_error": "タグ付けに失敗しました: {error}",
+            "tag_image_invalid_format": "画像形式が不正です。対応形式: JPEG, PNG, WEBP, GIF, BMP",
+            "tag_image_resolution_too_large": "画像の解像度が大きすぎます（最大 4096x4096）",
         },
     }
 
@@ -43,11 +47,11 @@ def write_config(path: Path, data: dict) -> str:
     return str(path)
 
 
-def make_bot_for_test(config: dict, runner, output_dir=None) -> ImageBot:
+def make_bot_for_test(config: dict, runner, output_dir=None, wd14_runner=None) -> ImageBot:
     if output_dir is not None:
         config = {**config, "comfyui_output_dir": str(output_dir)}
     with patch.object(discord.Client, "__init__", return_value=None):
-        bot = ImageBot(config, runner)
+        bot = ImageBot(config, runner, wd14_runner or MagicMock())
     # discord.Client.user は _connection.user を参照するため両方設定する
     bot._connection = MagicMock()
     bot._connection.user = MagicMock()

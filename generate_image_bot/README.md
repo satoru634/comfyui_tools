@@ -2,14 +2,15 @@
 
 Discord から ComfyUI に画像生成を指示し、生成された画像を Discord に返送するボットです。
 
-内部で `run_workflow` の `WorkflowRunner` を使用して画像生成を実行します。
+内部で `run_workflow` の `WorkflowRunner` / `Wd14TaggerRunner` を使用して画像生成・タグ付けを実行します。
 
 ボットの動作記録（起動・終了・Discord イベント・画像生成結果）は `log/YYYYMMDD/` ディレクトリに JSON 形式で記録されます。
 
 ## 機能
 
 - **メンションメッセージ**によるプロンプト入力（キーワード形式: `positive:` / `negative:` / `loras:` / `image_orientation:`）
-- **スラッシュコマンド**（`/gen_image`）によるモーダル入力
+- **スラッシュコマンド**（`/gen_image`）によるモーダル入力で画像生成
+- **スラッシュコマンド**（`/tag_image`）による画像タグ付け（WD Timm Tagger 使用）
 - 画像の向き（`vertical` / `horizontal`）を指定して画像サイズを切り替え（省略時は `run_workflow/config.json` の既定値を使用）
 - ユーザー単位のレート制限（30秒クールダウン）
 - 複数ユーザーのリクエストを並行処理（同一ユーザーは最大 4 件まで同時送信可能）
@@ -21,7 +22,7 @@ Discord から ComfyUI に画像生成を指示し、生成された画像を Di
 ## 必要環境
 
 - Python 3.12+
-- 起動済みの ComfyUI
+- 起動済みの ComfyUI（`/tag_image` 使用時は `bedovyy/ComfyUI-WD-Timm-Tagger` カスタムノードも必要）
 - `run_workflow`（同リポジトリの兄弟ディレクトリ）
 - Discord Bot トークン
 
@@ -55,9 +56,9 @@ Bot の権限（Bot Permissions）:
 |---|---|
 | チャンネルを表示（View Channels） | メッセージの受信 |
 | メッセージを送る（Send Messages） | 画像・エラーメッセージの返信 |
-| ファイルを添付（Attach Files） | 生成画像の送信 |
+| ファイルを添付（Attach Files） | 生成画像・タグ付け画像の送信 |
 | リアクションを付ける（Add Reactions） | ⏳ / ✅ / ❌ の付与 |
-| スラッシュコマンドを使用 (Use Slash Commands) | 画像生成のモーダルウィンドウ起動 |
+| スラッシュコマンドを使用 (Use Slash Commands) | `/gen_image` / `/tag_image` の使用 |
 
 ### 2. 依存ライブラリのインストール
 
@@ -93,7 +94,11 @@ pip install -r requirements.txt
     "file_too_large": "画像ファイルが大きすぎます（{size_mb} MB）",
     "unexpected_error": "予期しないエラーが発生しました",
     "dm_not_supported": "DM からは使用できません。サーバーのチャンネルで実行してください。",
-    "shutdown_in_progress": "ボットはシャットダウン中です。しばらくしてから再試行してください。"
+    "shutdown_in_progress": "ボットはシャットダウン中です。しばらくしてから再試行してください。",
+    "tag_image_invalid_type": "画像ファイルのみ対応しています。",
+    "tag_image_error": "タグ付けに失敗しました:\n{error}",
+    "tag_image_invalid_format": "画像形式が不正です。対応形式: JPEG, PNG, WEBP, GIF, BMP",
+    "tag_image_resolution_too_large": "画像の解像度が大きすぎます（最大 4096x4096）"
   }
 }
 ```
@@ -112,7 +117,7 @@ pip install -r requirements.txt
 | `shutdown_time` | ボットを停止する時刻（`"hh:mm"` 形式。省略または `null` で停止なし） |
 | `image_size` | `vertical` / `horizontal` それぞれの画像サイズ（`width` / `height`。整数、512〜2048、8 の倍数） |
 | `reactions` | 処理中 / 成功 / エラー時に付与するリアクション絵文字 |
-| `messages` | ボットが返信するメッセージのテンプレート（`dm_not_supported` / `shutdown_in_progress` を含む） |
+| `messages` | ボットが返信するメッセージのテンプレート |
 
 Unicode 絵文字（例: `⏳`）とカスタム絵文字（例: `<:name:id>`）の両方を `reactions` に指定できます。
 
@@ -133,7 +138,7 @@ python generate_image_bot.py --config /path/to/config.json
 
 操作方法は **メンションメッセージ** と **スラッシュコマンド** の 2 種類があります。
 
-**メンションメッセージ**
+**メンションメッセージ（画像生成）**
 
 ボットにメンションし、キーワード形式でプロンプトを入力します。
 
@@ -151,15 +156,27 @@ image_orientation: vertical
 - `image_orientation:` は省略可能（`vertical` または `horizontal`。省略時は `run_workflow/config.json` の既定サイズを使用）
 - プロンプトは複数行で記述できます
 
-**スラッシュコマンド**
+**スラッシュコマンド — `/gen_image`（画像生成）**
 
 テキストチャンネルで `/gen_image` を入力するとモーダルが表示されます。各フィールドに入力して送信すると、太字形式のメッセージがチャンネルに投稿されて画像生成が始まります。
+
+**スラッシュコマンド — `/tag_image`（画像タグ付け）**
+
+テキストチャンネルで `/tag_image` を入力し、`image` パラメータに画像ファイルを添付して送信します。WD Timm Tagger でタグを解析し、タグ文字列と元の画像を返信します。
+
+| 制約 | 内容 |
+|---|---|
+| 対応形式 | `image/*` MIME type かつ JPEG / PNG / WEBP / GIF / BMP |
+| ファイルサイズ上限 | 10 MB 未満 |
+| 解像度上限 | 4096×4096 以下 |
+
+添付ファイルは Pillow で実フォーマット検証を行い、実行ファイルを画像として偽装したファイルを拒否します。返信時のファイル名は元のファイル名を使用せず、タイムスタンプベースの UUID に変換します。
 
 詳細な使用方法については[USERS_MANUAL](./doc/USERS_MANUAL.md)を参照してください。
 
 ## 出力
 
-### Discord への返信
+### Discord への返信（画像生成）
 
 生成成功時は画像ファイルを添付して返信します。
 
@@ -167,6 +184,17 @@ image_orientation: vertical
 [⏳ リアクション付与]
 ...（生成中）...
 [画像ファイルを添付して返信]
+[⏳ リアクション削除、✅ リアクション付与]
+```
+
+### Discord への返信（タグ付け）
+
+タグ付け成功時はタグ文字列と元の画像を添付して返信します。
+
+```
+[⏳ リアクション付与]
+...（タグ付け中）...
+[タグ文字列 + 元の画像を添付して返信]
 [⏳ リアクション削除、✅ リアクション付与]
 ```
 
@@ -227,8 +255,8 @@ generate_image_bot/
     SPEC/                # セクション別仕様書
     USERS_MANUAL.md
   modules/
-    image_bot.py         # ImageBot クラス
-    gen_image_modal.py   # GenImageModal クラス（スラッシュコマンド用モーダル）
+    image_bot.py         # ImageBot クラス（/gen_image・/tag_image コマンド含む）
+    gen_image_modal.py   # GenImageModal クラス（/gen_image モーダル）
     message_parser.py    # MessageParser クラス
     rate_limiter.py      # RateLimiter クラス
     load_config.py       # 設定ファイルの読み込み・バリデーション

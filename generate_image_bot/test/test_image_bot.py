@@ -1,12 +1,15 @@
 """image_bot.py のユニットテスト"""
 
 import asyncio
+import contextlib
+import io
 import json
 import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
+from PIL import Image as PILImage
 
 from modules.image_bot import ImageBot
 from modules.common_lib import write_system_log, write_discord_log
@@ -724,3 +727,275 @@ class TestImageBotShutdownReason:
                 asyncio.run(bot._shutdown_watcher())
 
         assert bot._shutdown_reason == "scheduled"
+
+
+# ── ImageBot: /tag_image コマンド ─────────────────────────────────────────────
+
+
+def _make_valid_png_bytes(width: int = 100, height: int = 100) -> bytes:
+    """テスト用の有効な PNG バイト列を生成する。"""
+    img = PILImage.new("RGB", (width, height))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class TestTagImageCommand:
+    def _make_interaction(self, guild_set=True, content_type="image/png", size=100):
+        interaction = MagicMock()
+        if guild_set:
+            interaction.guild = MagicMock()
+            interaction.guild.id = 222
+        else:
+            interaction.guild = None
+        interaction.user = MagicMock()
+        interaction.user.id = 99999
+        interaction.user.name = "testuser"
+        interaction.channel_id = 111
+        interaction.response.send_message = AsyncMock()
+        mock_message = MagicMock()
+        mock_message.add_reaction = AsyncMock()
+        mock_message.remove_reaction = AsyncMock()
+        mock_message.reply = AsyncMock()
+        interaction.original_response = AsyncMock(return_value=mock_message)
+        attachment = MagicMock()
+        attachment.content_type = content_type
+        attachment.size = size
+        attachment.filename = "photo.jpg"
+        attachment.read = AsyncMock(return_value=_make_valid_png_bytes())
+        return interaction, mock_message, attachment
+
+    def _make_bot(self, tmp_path, wd14_runner=None):
+        return make_bot_for_test(valid_config(), MagicMock(), tmp_path, wd14_runner)
+
+    def _run_command(self, bot, interaction, attachment, *extra_cms):
+        """_validate_image_data と _make_safe_filename をモックして _tag_image_command を実行する。"""
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(
+                patch("modules.image_bot._validate_image_data", return_value="PNG")
+            )
+            stack.enter_context(
+                patch("modules.image_bot._make_safe_filename", return_value="safe.png")
+            )
+            for cm in extra_cms:
+                stack.enter_context(cm)
+            asyncio.run(bot._tag_image_command(interaction, attachment))
+
+    def test_dm_sends_ephemeral_error(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        interaction, _, attachment = self._make_interaction(guild_set=False)
+        asyncio.run(bot._tag_image_command(interaction, attachment))
+        interaction.response.send_message.assert_called_once_with(
+            "DM からは使用できません。", ephemeral=True
+        )
+
+    def test_dm_does_not_call_tag(self, tmp_path):
+        wd14 = MagicMock()
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, _, attachment = self._make_interaction(guild_set=False)
+        asyncio.run(bot._tag_image_command(interaction, attachment))
+        wd14.tag.assert_not_called()
+
+    def test_shutdown_sends_ephemeral_error(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        bot._shutdown_requested = True
+        interaction, _, attachment = self._make_interaction()
+        asyncio.run(bot._tag_image_command(interaction, attachment))
+        interaction.response.send_message.assert_called_once_with(
+            "シャットダウン中です。", ephemeral=True
+        )
+
+    def test_invalid_mime_sends_ephemeral_error(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        interaction, _, attachment = self._make_interaction(content_type="text/plain")
+        asyncio.run(bot._tag_image_command(interaction, attachment))
+        interaction.response.send_message.assert_called_once_with(
+            "画像ファイルのみ対応しています。", ephemeral=True
+        )
+
+    def test_none_mime_sends_ephemeral_error(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        interaction, _, attachment = self._make_interaction(content_type=None)
+        asyncio.run(bot._tag_image_command(interaction, attachment))
+        interaction.response.send_message.assert_called_once_with(
+            "画像ファイルのみ対応しています。", ephemeral=True
+        )
+
+    def test_file_too_large_sends_ephemeral_error(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        interaction, _, attachment = self._make_interaction(size=10 * 1024 * 1024)
+        asyncio.run(bot._tag_image_command(interaction, attachment))
+        call_kwargs = interaction.response.send_message.call_args.kwargs
+        assert call_kwargs["ephemeral"] is True
+        assert "大きすぎます" in interaction.response.send_message.call_args.args[0]
+
+    def test_invalid_format_sends_ephemeral_error(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        interaction, _, attachment = self._make_interaction()
+        attachment.read = AsyncMock(return_value=b"not_an_image")
+        asyncio.run(bot._tag_image_command(interaction, attachment))
+        call_kwargs = interaction.response.send_message.call_args.kwargs
+        assert call_kwargs["ephemeral"] is True
+        assert "不正" in interaction.response.send_message.call_args.args[0]
+
+    def test_resolution_too_large_sends_ephemeral_error(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        interaction, _, attachment = self._make_interaction()
+        attachment.read = AsyncMock(return_value=_make_valid_png_bytes(width=4097, height=100))
+        asyncio.run(bot._tag_image_command(interaction, attachment))
+        call_kwargs = interaction.response.send_message.call_args.kwargs
+        assert call_kwargs["ephemeral"] is True
+        assert "解像度" in interaction.response.send_message.call_args.args[0]
+
+    def test_rate_limit_sends_error_reaction(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        bot._limiter.record_request(99999)
+        interaction, mock_message, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        mock_message.add_reaction.assert_called_once_with("❌")
+
+    def test_rate_limit_message_contains_seconds(self, tmp_path):
+        bot = self._make_bot(tmp_path)
+        bot._limiter.record_request(99999)
+        interaction, _, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        assert "秒" in interaction.response.send_message.call_args.args[0]
+
+    def test_concurrent_limit_sends_error_reaction(self, tmp_path):
+        from modules.rate_limiter import RateLimiter
+        bot = self._make_bot(tmp_path)
+        for _ in range(RateLimiter.MAX_CONCURRENT):
+            bot._limiter.increment_active(99999)
+        interaction, mock_message, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        mock_message.add_reaction.assert_called_once_with("❌")
+
+    def test_success_replies_with_tags_and_image(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.return_value = "1girl, solo"
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, mock_message, attachment = self._make_interaction()
+        mock_file_cm = patch("modules.image_bot.discord.File")
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch("modules.image_bot._validate_image_data", return_value="PNG"))
+            stack.enter_context(patch("modules.image_bot._make_safe_filename", return_value="safe.png"))
+            mock_file = stack.enter_context(mock_file_cm)
+            asyncio.run(bot._tag_image_command(interaction, attachment))
+        mock_message.reply.assert_called_once_with("1girl, solo", file=mock_file.return_value)
+
+    def test_success_uses_safe_filename_for_discord_file(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.return_value = "1girl"
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, _, attachment = self._make_interaction()
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch("modules.image_bot._validate_image_data", return_value="PNG"))
+            stack.enter_context(patch("modules.image_bot._make_safe_filename", return_value="safe.png"))
+            mock_file = stack.enter_context(patch("modules.image_bot.discord.File"))
+            asyncio.run(bot._tag_image_command(interaction, attachment))
+        _, file_kwargs = mock_file.call_args
+        assert file_kwargs.get("filename") == "safe.png" or mock_file.call_args.args[1] == "safe.png"
+
+    def test_success_adds_success_reaction(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.return_value = "1girl"
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, mock_message, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        reactions = [c.args[0] for c in mock_message.add_reaction.call_args_list]
+        assert "✅" in reactions
+
+    def test_success_removes_processing_reaction(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.return_value = "1girl"
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, mock_message, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        mock_message.remove_reaction.assert_called_once_with("⏳", bot.user)
+
+    def test_value_error_sends_error_reaction_with_message(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.side_effect = ValueError("接続失敗")
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, mock_message, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        reactions = [c.args[0] for c in mock_message.add_reaction.call_args_list]
+        assert "❌" in reactions
+        assert "接続失敗" in mock_message.reply.call_args.args[0]
+
+    def test_unexpected_error_sends_fixed_message(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.side_effect = RuntimeError("crash")
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, mock_message, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        assert mock_message.reply.call_args.args[0] == "予期しないエラーが発生しました"
+
+    def test_active_count_decremented_after_success(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.return_value = "1girl"
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, _, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        assert bot._limiter.has_active() is False
+
+    def test_active_count_decremented_after_error(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.side_effect = ValueError("error")
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, _, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        assert bot._limiter.has_active() is False
+
+    def test_passes_image_bytes_and_safe_filename_to_tag(self, tmp_path):
+        wd14 = MagicMock()
+        wd14.tag.return_value = "1girl"
+        bot = self._make_bot(tmp_path, wd14)
+        interaction, _, attachment = self._make_interaction()
+        self._run_command(bot, interaction, attachment)
+        call_args = wd14.tag.call_args
+        assert call_args.args[1] == "safe.png"
+
+
+# ── _validate_image_data / _make_safe_filename ────────────────────────────────
+
+
+class TestValidateImageData:
+    def test_valid_png_returns_format(self):
+        from modules.image_bot import _validate_image_data
+        result = _validate_image_data(_make_valid_png_bytes())
+        assert result == "PNG"
+
+    def test_invalid_bytes_raises(self):
+        from modules.image_bot import _validate_image_data
+        with pytest.raises(ValueError, match="tag_image_invalid_format"):
+            _validate_image_data(b"not an image")
+
+    def test_oversized_width_raises(self):
+        from modules.image_bot import _validate_image_data
+        with pytest.raises(ValueError, match="tag_image_resolution_too_large"):
+            _validate_image_data(_make_valid_png_bytes(width=4097, height=100))
+
+    def test_oversized_height_raises(self):
+        from modules.image_bot import _validate_image_data
+        with pytest.raises(ValueError, match="tag_image_resolution_too_large"):
+            _validate_image_data(_make_valid_png_bytes(width=100, height=4097))
+
+    def test_exactly_max_resolution_is_allowed(self):
+        from modules.image_bot import _validate_image_data
+        result = _validate_image_data(_make_valid_png_bytes(width=4096, height=4096))
+        assert result == "PNG"
+
+
+class TestMakeSafeFilename:
+    def test_returns_jpg_for_jpeg(self):
+        from modules.image_bot import _make_safe_filename
+        assert _make_safe_filename("JPEG").endswith(".jpg")
+
+    def test_returns_png_for_png(self):
+        from modules.image_bot import _make_safe_filename
+        assert _make_safe_filename("PNG").endswith(".png")
+
+    def test_filenames_differ_between_calls(self):
+        from modules.image_bot import _make_safe_filename
+        assert _make_safe_filename("PNG") != _make_safe_filename("PNG")

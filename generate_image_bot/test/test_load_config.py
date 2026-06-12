@@ -94,6 +94,10 @@ class TestLoadConfig:
             "unexpected_error",
             "dm_not_supported",
             "shutdown_in_progress",
+            "tag_image_invalid_type",
+            "tag_image_error",
+            "tag_image_invalid_format",
+            "tag_image_resolution_too_large",
         ],
     )
     def test_missing_message_key(self, tmp_path, key):
@@ -114,6 +118,10 @@ class TestLoadConfig:
             "unexpected_error",
             "dm_not_supported",
             "shutdown_in_progress",
+            "tag_image_invalid_type",
+            "tag_image_error",
+            "tag_image_invalid_format",
+            "tag_image_resolution_too_large",
         ],
     )
     def test_message_value_not_string(self, tmp_path, key):

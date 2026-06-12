@@ -4,7 +4,14 @@
       "Bash(python -m pytest test/ -v)",
       "Bash(python -m pytest test/ -q)",
       "Bash(python -m pytest test/test_generate_image_bot.py -v)",
-      "Bash(black generate_image_bot.py test/test_generate_image_bot.py)"
+      "Bash(black generate_image_bot.py test/test_generate_image_bot.py)",
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr *)",
+      "Bash(git branch *)"
     ]
   }
 }
