@@ -14,24 +14,10 @@ if errorlevel 1 (
 echo === Upgrading pip ===
 .venv\Scripts\python.exe -m pip install --upgrade pip
 
-echo === Installing pytest ===
-.venv\Scripts\pip.exe install pytest
+echo === Installing dependencies ===
+.venv\Scripts\pip.exe install -r requirements.txt
 if errorlevel 1 (
-    echo Error: Failed to install pytest.
-    exit /b 1
-)
-
-echo === Installing run_workflow dependencies ===
-.venv\Scripts\pip.exe install -r run_workflow\requirements.txt
-if errorlevel 1 (
-    echo Error: Failed to install run_workflow dependencies.
-    exit /b 1
-)
-
-echo === Installing generate_image_bot dependencies ===
-.venv\Scripts\pip.exe install -r generate_image_bot\requirements.txt
-if errorlevel 1 (
-    echo Error: Failed to install generate_image_bot dependencies.
+    echo Error: Failed to install dependencies.
     exit /b 1
 )
 

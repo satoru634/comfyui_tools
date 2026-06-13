@@ -11,14 +11,8 @@ python3 -m venv .venv
 echo "=== Upgrading pip ==="
 .venv/bin/python -m pip install --upgrade pip
 
-echo "=== Installing pytest ==="
-.venv/bin/pip install pytest
-
-echo "=== Installing run_workflow dependencies ==="
-.venv/bin/pip install -r run_workflow/requirements.txt
-
-echo "=== Installing generate_image_bot dependencies ==="
-.venv/bin/pip install -r generate_image_bot/requirements.txt
+echo "=== Installing dependencies ==="
+.venv/bin/pip install -r requirements.txt
 
 echo ""
 echo "=== Setup complete ==="

@@ -1,0 +1,11 @@
+# run_workflow
+requests==2.32.3
+websockets==15.0.1
+
+# generate_image_bot
+discord.py==2.7.1
+pillow==12.2.0
+aiohttp==3.14.1
+
+# テスト
+pytest==8.3.5

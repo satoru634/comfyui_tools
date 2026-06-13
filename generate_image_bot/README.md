@@ -60,12 +60,9 @@ Bot の権限（Bot Permissions）:
 | リアクションを付ける（Add Reactions） | ⏳ / ✅ / ❌ の付与 |
 | スラッシュコマンドを使用 (Use Slash Commands) | `/gen_image` / `/tag_image` の使用 |
 
-### 2. 依存ライブラリのインストール
+## セットアップ
 
-```bash
-cd generate_image_bot
-pip install -r requirements.txt
-```
+リポジトリルートの[セットアップ](../README.md#セットアップ)を参照してください。
 
 ## 設定
 
@@ -249,7 +246,6 @@ python -m pytest test/
 generate_image_bot/
   generate_image_bot.py  # エントリポイント（起動・再接続ループ）
   config.json            # ボット設定（トークン・パス等）
-  requirements.txt
   doc/
     SPEC.md              # 仕様書（概要・ファイル構成）
     SPEC/                # セクション別仕様書

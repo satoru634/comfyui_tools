@@ -24,10 +24,7 @@ LoRA の枚数に応じてテンプレートを自動選択し、プロンプト
 
 ## セットアップ
 
-```bash
-cd run_workflow
-pip install -r requirements.txt
-```
+リポジトリルートの[セットアップ](../README.md#セットアップ)を参照してください。
 
 ## 設定
 
@@ -212,7 +209,6 @@ ComfyUI で作成した任意のワークフローに差し替えて使用でき
 run_workflow/
   run_workflow.py              # メインスクリプト（WorkflowRunner・エントリポイント）
   config.json                  # 接続設定・既定画像サイズ・LoRAマッピング・WD14設定
-  requirements.txt
   modules/
     load_files.py              # 設定・入力ファイルの読み込みと検証
     workflow_builder.py        # テンプレート選択・書き換え
