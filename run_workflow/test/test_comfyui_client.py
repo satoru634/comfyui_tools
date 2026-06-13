@@ -62,7 +62,7 @@ class TestComfyUIClientMonitorWs:
     def setup_method(self):
         self.client = ComfyUIClient("http://127.0.0.1:8188")
 
-    def _run(self, messages: list) -> None:
+    def _run(self, messages: list, *, is_completed_return=None) -> None:
         msgs = messages
 
         class FakeWs:
@@ -82,7 +82,15 @@ class TestComfyUIClientMonitorWs:
         mock_cm.__aenter__ = AsyncMock(return_value=FakeWs())
         mock_cm.__aexit__ = AsyncMock(return_value=False)
         with patch("modules.comfyui_client.websockets.connect", return_value=mock_cm):
-            asyncio.run(self.client._monitor_ws("prompt-1", "ws://localhost/ws"))
+            if is_completed_return is not None:
+                with patch.object(
+                    self.client, "_is_completed", return_value=is_completed_return
+                ):
+                    asyncio.run(
+                        self.client._monitor_ws("prompt-1", "ws://localhost/ws")
+                    )
+            else:
+                asyncio.run(self.client._monitor_ws("prompt-1", "ws://localhost/ws"))
 
     def test_completes_on_execution_complete(self):
         self._run(
@@ -90,13 +98,43 @@ class TestComfyUIClientMonitorWs:
         )
 
     def test_completes_on_executing_null_node(self):
+        # executing{node:null} 受信後にポーリングで history を確認して完了する
         self._run(
             [
                 make_ws_message(
                     type="executing", data={"node": None, "prompt_id": "prompt-1"}
                 )
-            ]
+            ],
+            is_completed_return=True,
         )
+
+    def test_completes_via_polling_on_ws_close(self):
+        # WebSocket が閉じられた後にポーリングで完了を検知する
+        self._run([], is_completed_return=True)
+
+    def test_raises_timeout_when_poll_never_completes(self):
+        # ポーリングがタイムアウトした場合は ValueError を送出する
+        msgs = []
+
+        class FakeWs:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+        mock_cm = AsyncMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=FakeWs())
+        mock_cm.__aexit__ = AsyncMock(return_value=False)
+        with patch("modules.comfyui_client.websockets.connect", return_value=mock_cm):
+            with patch.object(self.client, "_is_completed", return_value=False):
+                with patch("asyncio.sleep", new=AsyncMock()):
+                    with pytest.raises(ValueError, match="タイムアウト"):
+                        asyncio.run(
+                            self.client._monitor_ws(
+                                "prompt-1", "ws://localhost/ws", _poll_timeout=2
+                            )
+                        )
 
     def test_ignores_different_prompt_id(self):
         self._run(

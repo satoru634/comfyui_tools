@@ -89,9 +89,11 @@ class ComfyUIClient:
         except Exception:
             return False
 
-    async def _monitor_ws(self, prompt_id: str, ws_url: str) -> None:
+    async def _monitor_ws(
+        self, prompt_id: str, ws_url: str, _poll_timeout: int = 600
+    ) -> None:
         """WebSocket を監視して、指定された prompt_id のワークフローの完了を待つ。
-        接続前に完了している場合は _is_completed のポーリングにフォールバックする。"""
+        接続が切れた場合や executing{node:null} 受信後はポーリングにフォールバックする。"""
         try:
             async with websockets.connect(ws_url) as ws:
                 ws_iter = ws.__aiter__()
@@ -104,7 +106,8 @@ class ComfyUIClient:
                             return
                         continue
                     except StopAsyncIteration:
-                        return
+                        # WebSocket が閉じられた。ポーリングにフォールバックする
+                        break
                     if isinstance(raw, bytes):
                         continue  # ComfyUI はプレビュー画像をバイナリフレームで送信するためスキップする
                     msg = json.loads(raw)
@@ -118,8 +121,20 @@ class ComfyUIClient:
                         raise ValueError(
                             f"ComfyUI 実行エラー: {msg_data.get('exception_message', '不明なエラー')}"
                         )
-                    # node が None の executing メッセージはワークフロー全体の完了を示す
+                    # node が None の executing メッセージは古い ComfyUI の完了シグナル。
+                    # history 書き込みとの競合を避けるためポーリングに切り替える
                     if msg_type == "executing" and msg_data.get("node") is None:
-                        return
+                        break
         except (OSError, websockets.exceptions.WebSocketException) as e:
             raise ValueError(f"WebSocket 接続エラー: {e}")
+
+        # WebSocket 切断または executing{node:null} 受信後、history に書き込まれるまでポーリングする
+        await self._poll_until_completed(prompt_id, _poll_timeout)
+
+    async def _poll_until_completed(self, prompt_id: str, timeout: int = 600) -> None:
+        """_is_completed が True になるまで 1 秒間隔でポーリングする。timeout 秒後にエラーを送出する。"""
+        for _ in range(timeout):
+            if self._is_completed(prompt_id):
+                return
+            await asyncio.sleep(1)
+        raise ValueError("ComfyUI の完了待機がタイムアウトしました")
