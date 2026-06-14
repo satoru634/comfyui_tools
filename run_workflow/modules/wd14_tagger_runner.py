@@ -6,7 +6,7 @@ from pathlib import Path
 
 from modules.comfyui_client import ComfyUIClient
 from modules.load_files import (
-    load_config,
+    load_tagger_config,
     validate_wd14_tagger_config,
 )
 
@@ -19,7 +19,7 @@ class Wd14TaggerRunner:
     _PREVIEW_TITLE = "プレビュー任意"
 
     def __init__(self, config_path: str = "config.json"):
-        self.config = load_config(config_path)
+        self.config = load_tagger_config(config_path)
         validate_wd14_tagger_config(self.config)
         self._client = ComfyUIClient(self.config["comfyui_url"])
         self._template, self._title_to_id = self._load_template()

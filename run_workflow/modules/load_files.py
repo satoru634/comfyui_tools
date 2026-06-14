@@ -84,6 +84,24 @@ def validate_wd14_tagger_config(config: dict) -> None:
             )
 
 
+def load_tagger_config(config_path: str) -> dict:
+    """WD14 Tagger 用の config.json を読み込む。comfyui_url のみ必須。"""
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        raise ValueError("設定ファイルが見つかりません")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"config.json の解析に失敗しました: {e}")
+    if not isinstance(data, dict):
+        raise ValueError("config.json はオブジェクト形式である必要があります")
+    if "comfyui_url" not in data:
+        raise ValueError("config.json に 'comfyui_url' キーがありません")
+    if not isinstance(data["comfyui_url"], str) or not data["comfyui_url"].strip():
+        raise ValueError("'comfyui_url' は空でない文字列である必要があります")
+    return data
+
+
 def load_config(config_path: str) -> dict:
     """config.json を読み込んで内容を検証する。問題があれば ValueError を送出する。"""
     try:

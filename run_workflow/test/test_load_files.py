@@ -11,6 +11,7 @@ from test_helper import (
 
 from modules.load_files import (
     load_config,
+    load_tagger_config,
     validate_inputs,
     validate_wd14_tagger_config,
     load_and_validate_input,
@@ -300,6 +301,48 @@ class TestLoadConfig:
         )
         with pytest.raises(ValueError, match="default_image_size が不正です"):
             load_config(path)
+
+
+# ── load_tagger_config ────────────────────────────────────────────────────────
+
+
+class TestLoadTaggerConfig:
+    def test_valid_minimal(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json", {"comfyui_url": "http://127.0.0.1:8188"}
+        )
+        config = load_tagger_config(path)
+        assert config["comfyui_url"] == "http://127.0.0.1:8188"
+
+    def test_valid_ignores_extra_fields(self, tmp_path):
+        path = write_json(tmp_path / "config.json", valid_config())
+        config = load_tagger_config(path)
+        assert config["comfyui_url"] == "http://127.0.0.1:8188"
+
+    def test_file_not_found(self, tmp_path):
+        with pytest.raises(ValueError, match="設定ファイルが見つかりません"):
+            load_tagger_config(str(tmp_path / "nonexistent.json"))
+
+    def test_invalid_json(self, tmp_path):
+        p = tmp_path / "config.json"
+        p.write_text("not json", encoding="utf-8")
+        with pytest.raises(ValueError, match="config.json の解析に失敗しました"):
+            load_tagger_config(str(p))
+
+    def test_missing_comfyui_url_key(self, tmp_path):
+        path = write_json(tmp_path / "config.json", {"wd14_tagger": {}})
+        with pytest.raises(ValueError, match="'comfyui_url' キーがありません"):
+            load_tagger_config(path)
+
+    def test_comfyui_url_empty(self, tmp_path):
+        path = write_json(tmp_path / "config.json", {"comfyui_url": ""})
+        with pytest.raises(ValueError, match="空でない文字列"):
+            load_tagger_config(path)
+
+    def test_comfyui_url_not_string(self, tmp_path):
+        path = write_json(tmp_path / "config.json", {"comfyui_url": 8188})
+        with pytest.raises(ValueError, match="空でない文字列"):
+            load_tagger_config(path)
 
 
 # ── validate_wd14_tagger_config ───────────────────────────────────────────────
