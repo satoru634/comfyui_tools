@@ -34,6 +34,7 @@ source .venv/bin/activate
 |---|---|
 | [`run_workflow/`](run_workflow/README.md) | ComfyUI のワークフローを Python から自動実行するツール |
 | [`generate_image_bot/`](generate_image_bot/README.md) | Discord のメンションで ComfyUI に画像生成を指示し、生成された画像を返送する Discord ボット |
+| [`captioning_tool/`](captioning_tool/README.md) | ディレクトリ内の画像を WD Timm Tagger で一括タグ付けし、`.txt` キャプションファイルを生成するツール |
 
 ## サブモジュール
 

@@ -1,0 +1,10 @@
+{
+  "comfyui_url": "http://127.0.0.1:8188",
+  "wd14_tagger": {
+    "model_name": "wd-eva02-large-tagger-v3",
+    "general_threshold": 0.35,
+    "character_threshold": 0.85
+  },
+  "prepend_tags": [],
+  "exclude_tags": []
+}

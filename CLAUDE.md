@@ -16,6 +16,7 @@ ComfyUI 関連の Python ツール群。各ツールはサブディレクトリ�
 |---|---|---|
 | `run_workflow/` | ComfyUI のワークフローを Python から自動実行するツール | [SPEC.md](run_workflow/doc/SPEC.md) |
 | `generate_image_bot/` | Discord のメンションで ComfyUI に画像生成を指示し、生成された画像を返送する Discord ボット | [SPEC.md](generate_image_bot/doc/SPEC.md) |
+| `captioning_tool/` | ディレクトリ内の画像を WD Timm Tagger で一括タグ付けし、`.txt` キャプションファイルを生成するツール | [SPEC.md](captioning_tool/doc/SPEC.md) |
 
 ## テスト
 
