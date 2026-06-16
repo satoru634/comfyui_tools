@@ -13,6 +13,7 @@ from modules.workflow_builder import (
 )
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+WORKFLOW_NAME = "sdxl"
 
 
 # ── WorkflowBuilder ───────────────────────────────────────────────────────────
@@ -23,25 +24,38 @@ class TestWorkflowBuilderSelectTemplate:
         self.builder = WorkflowBuilder(str(TEMPLATES_DIR))
 
     def test_zero_loras(self):
-        assert self.builder.select_template(0).endswith("template_lora_0.json")
+        assert self.builder.select_template(0, WORKFLOW_NAME).endswith(
+            "template_lora_0.json"
+        )
 
     def test_four_loras(self):
-        assert self.builder.select_template(4).endswith("template_lora_4.json")
+        assert self.builder.select_template(4, WORKFLOW_NAME).endswith(
+            "template_lora_4.json"
+        )
 
     @pytest.mark.parametrize("count", [0, 1, 2, 3, 4])
     def test_correct_template_selected(self, count):
-        path = self.builder.select_template(count)
+        path = self.builder.select_template(count, WORKFLOW_NAME)
         assert Path(path).exists()
         assert f"template_lora_{count}.json" in path
+        assert WORKFLOW_NAME in path
 
-    def test_templates_dir_not_found(self, tmp_path):
-        builder = WorkflowBuilder(str(tmp_path / "no_dir"))
+    def test_workflow_dir_not_found(self, tmp_path):
+        builder = WorkflowBuilder(str(tmp_path))
+        with pytest.raises(
+            ValueError, match="テンプレートディレクトリが見つかりません"
+        ):
+            builder.select_template(0, "unknown_workflow")
+
+    def test_template_file_not_found(self, tmp_path):
+        (tmp_path / WORKFLOW_NAME).mkdir()
+        builder = WorkflowBuilder(str(tmp_path))
         with pytest.raises(ValueError, match="テンプレートファイルが見つかりません"):
-            builder.select_template(0)
+            builder.select_template(0, WORKFLOW_NAME)
 
     def test_lora_count_out_of_range(self):
         with pytest.raises(ValueError, match="0〜4 個の範囲"):
-            self.builder.select_template(5)
+            self.builder.select_template(5, WORKFLOW_NAME)
 
 
 class TestWorkflowBuilderLoadTemplate:
@@ -49,7 +63,7 @@ class TestWorkflowBuilderLoadTemplate:
         self.builder = WorkflowBuilder(str(TEMPLATES_DIR))
 
     def test_valid(self):
-        path = str(TEMPLATES_DIR / "template_lora_1.json")
+        path = str(TEMPLATES_DIR / WORKFLOW_NAME / "template_lora_1.json")
         assert isinstance(self.builder.load_template(path), dict)
 
     def test_file_not_found(self, tmp_path):
@@ -217,7 +231,7 @@ class TestWorkflowBuilderApply:
 
     def test_real_template_with_two_loras(self):
         workflow = self.builder.load_template(
-            str(TEMPLATES_DIR / "template_lora_2.json")
+            str(TEMPLATES_DIR / WORKFLOW_NAME / "template_lora_2.json")
         )
         loras = [
             {"name": "lora_a", "file": "lora_a.safetensors", "strength": 0.8},

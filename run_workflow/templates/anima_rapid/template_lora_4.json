@@ -1,0 +1,198 @@
+{
+  "46": {
+    "inputs": {
+      "filename_prefix": "run_workflow_anima/run_workflow_anima",
+      "images": [
+        "73",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "画像を保存"
+    }
+  },
+  "71": {
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIPを読み込む"
+    }
+  },
+  "72": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAEを読み込む"
+    }
+  },
+  "73": {
+    "inputs": {
+      "samples": [
+        "76",
+        0
+      ],
+      "vae": [
+        "72",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "74": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "empty_latent_image"
+    }
+  },
+  "75": {
+    "inputs": {
+      "text": "worst quality, low quality, score_1, score_2, score_3, artist name, blurry, bad anatomy, extra fingers, sepia",
+      "clip": [
+        "71",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "negative_prompt"
+    }
+  },
+  "76": {
+    "inputs": {
+      "seed": 692714546207749,
+      "steps": 10,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "96:99",
+        0
+      ],
+      "positive": [
+        "77",
+        0
+      ],
+      "negative": [
+        "75",
+        0
+      ],
+      "latent_image": [
+        "74",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "77": {
+    "inputs": {
+      "text": "masterpiece, best quality, score_7, safe, 1girl, solo, anime style, fine lines, cel shading, soft shading,",
+      "clip": [
+        "71",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "positive_prompt"
+    }
+  },
+  "78": {
+    "inputs": {
+      "unet_name": "waiANIMA_v10Base10.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "96:81": {
+    "inputs": {
+      "lora_name": "sample_1.safetensors",
+      "strength_model": 1,
+      "model": [
+        "78",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "lora_loader_1"
+    }
+  },
+  "96:95": {
+    "inputs": {
+      "lora_name": "sample_2.safetensors",
+      "strength_model": 1,
+      "model": [
+        "96:81",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "lora_loader_2"
+    }
+  },
+  "96:97": {
+    "inputs": {
+      "lora_name": "sample_3.safetensors",
+      "strength_model": 1,
+      "model": [
+        "96:95",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "lora_loader_3"
+    }
+  },
+  "96:98": {
+    "inputs": {
+      "lora_name": "sample_4.safetensors",
+      "strength_model": 1,
+      "model": [
+        "96:97",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "lora_loader_4"
+    }
+  },
+  "96:99": {
+    "inputs": {
+      "lora_name": "anima-turbo-lora-v0.2.safetensors",
+      "strength_model": 1,
+      "model": [
+        "96:98",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  }
+}

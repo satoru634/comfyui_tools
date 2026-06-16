@@ -63,9 +63,23 @@ def resolve_loras(lora_names: list[str], lora_list: dict) -> list[dict]:
 class WorkflowRunner:
     """ComfyUI ワークフローの実行を担うクラス。Discord ボット等から import して使用する。"""
 
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(
+        self, config_path: str = "config.json", workflow_name: str | None = None
+    ):
         self.config = load_config(config_path)
         self._templates_dir = str(Path(__file__).parent / "templates")
+
+        # workflow_name が None の場合は config の default_workflow を使用する
+        self._workflow_name = (
+            workflow_name
+            if workflow_name is not None
+            else self.config["default_workflow"]
+        )
+        if self._workflow_name not in self.config["workflows"]:
+            raise ValueError(
+                f"ワークフロー '{self._workflow_name}' が config.json の workflows に存在しません"
+            )
+        self._workflow_config = self.config["workflows"][self._workflow_name]
 
         # execute() 実行後に結果を保持する属性。run() が result.json 出力に使用する
         self.template_path: str | None = None
@@ -84,13 +98,15 @@ class WorkflowRunner:
         # 入力を検証する
         validate_inputs(loras, prompts, image_size)
 
-        # 画像サイズの決定。入力に指定があればそれを使い、なければ config.json の default_image_size を使う
+        # 画像サイズの決定。入力に指定があればそれを使い、なければワークフローの default_image_size を使う
         effective_image_size = (
-            image_size if image_size is not None else self.config["default_image_size"]
+            image_size
+            if image_size is not None
+            else self._workflow_config["default_image_size"]
         )
 
-        # LoRA 名の解決。ユーザーが指定した LoRA 名を、config.json に定義された実ファイル名・強度に変換する
-        resolved = resolve_loras(loras, self.config["loras"])
+        # LoRA 名の解決。ユーザーが指定した LoRA 名を、ワークフロー設定の実ファイル名・強度に変換する
+        resolved = resolve_loras(loras, self._workflow_config["loras"])
         parameters = {
             "positive": prompts["positive"],
             "negative": prompts["negative"],
@@ -100,7 +116,7 @@ class WorkflowRunner:
 
         # ワークフローの構築
         builder = WorkflowBuilder(self._templates_dir)
-        template_path = builder.select_template(len(resolved))
+        template_path = builder.select_template(len(resolved), self._workflow_name)
         workflow = builder.load_template(template_path)
         workflow = builder.apply(
             workflow, prompts, resolved, image_size=effective_image_size
@@ -186,6 +202,12 @@ def main():
     parser.add_argument(
         "-i", "--input", help="入力 JSON ファイルのパス（--tag 未指定時に必須）"
     )
+    parser.add_argument(
+        "-w",
+        "--workflow",
+        default=None,
+        help="ワークフロー名（省略時: config.json の default_workflow を使用）",
+    )
     default_output = f"result_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.json"
     parser.add_argument(
         "-o",
@@ -208,7 +230,9 @@ def main():
     else:
         if not args.input:
             parser.error("--tag を指定しない場合は --input が必須です")
-        WorkflowRunner(args.config).run(args.input, args.output)
+        WorkflowRunner(args.config, workflow_name=args.workflow).run(
+            args.input, args.output
+        )
 
 
 if __name__ == "__main__":

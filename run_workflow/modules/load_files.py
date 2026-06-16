@@ -1,6 +1,5 @@
 import json
 
-
 # Discord ボット経由でユーザー入力を受け取るため、巨大文字列によるメモリ枯渇を防ぐ上限
 MAX_PROMPT_LENGTH = 3000
 
@@ -102,6 +101,29 @@ def load_tagger_config(config_path: str) -> dict:
     return data
 
 
+def _validate_workflow_entry(name: str, entry: dict) -> None:
+    """config.json の workflows[name] エントリを検証する"""
+    if not isinstance(entry, dict):
+        raise ValueError(
+            f"config.json の 'workflows.{name}' はオブジェクト形式である必要があります"
+        )
+    if "default_image_size" not in entry:
+        raise ValueError(
+            f"config.json の 'workflows.{name}' に 'default_image_size' キーがありません"
+        )
+    try:
+        _validate_image_size(entry["default_image_size"])
+    except ValueError as e:
+        raise ValueError(
+            f"config.json の workflows.{name}.default_image_size が不正です: {e}"
+        ) from e
+    if "loras" not in entry:
+        raise ValueError(
+            f"config.json の 'workflows.{name}' に 'loras' キーがありません"
+        )
+    _validate_lora_entries(entry["loras"])
+
+
 def load_config(config_path: str) -> dict:
     """config.json を読み込んで内容を検証する。問題があれば ValueError を送出する。"""
     try:
@@ -118,15 +140,25 @@ def load_config(config_path: str) -> dict:
         raise ValueError("config.json に 'comfyui_url' キーがありません")
     if not isinstance(data["comfyui_url"], str) or not data["comfyui_url"].strip():
         raise ValueError("'comfyui_url' は空でない文字列である必要があります")
-    if "default_image_size" not in data:
-        raise ValueError("config.json に 'default_image_size' キーがありません")
-    try:
-        _validate_image_size(data["default_image_size"])
-    except ValueError as e:
-        raise ValueError(f"config.json の default_image_size が不正です: {e}") from e
-    if "loras" not in data:
-        raise ValueError("config.json に 'loras' キーがありません")
-    _validate_lora_entries(data["loras"])
+    if "default_workflow" not in data:
+        raise ValueError("config.json に 'default_workflow' キーがありません")
+    if (
+        not isinstance(data["default_workflow"], str)
+        or not data["default_workflow"].strip()
+    ):
+        raise ValueError("'default_workflow' は空でない文字列である必要があります")
+    if "workflows" not in data:
+        raise ValueError("config.json に 'workflows' キーがありません")
+    if not isinstance(data["workflows"], dict):
+        raise ValueError(
+            "config.json の 'workflows' はオブジェクト形式である必要があります"
+        )
+    for name, entry in data["workflows"].items():
+        _validate_workflow_entry(name, entry)
+    if data["default_workflow"] not in data["workflows"]:
+        raise ValueError(
+            f"'default_workflow' の値 '{data['default_workflow']}' が 'workflows' に存在しません"
+        )
     return data
 
 

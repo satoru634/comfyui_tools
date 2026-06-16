@@ -1,17 +1,54 @@
 {
     "comfyui_url": "http://127.0.0.1:8188",
-    "default_image_size": {
-        "width": 832,
-        "height": 1216
-    },
-    "loras": {
-        "my_lora": {
-            "file": "my_lora.safetensors",
-            "strength": 0.8
+    "default_workflow": "sdxl",
+    "workflows": {
+        "sdxl": {
+            "default_image_size": {
+                "width": 832,
+                "height": 1216
+            },
+            "loras": {
+                "my_lora": {
+                    "file": "my_lora.safetensors",
+                    "strength": 0.8
+                },
+                "another_lora": {
+                    "file": "another_lora.safetensors",
+                    "strength": 0.8
+                }
+            }
         },
-        "another_lora": {
-            "file": "another_lora.safetensors",
-            "strength": 0.8
+        "anima": {
+            "default_image_size": {
+                "width": 1024,
+                "height": 1024
+            },
+            "loras": {
+                "my_lora": {
+                    "file": "my_lora.safetensors",
+                    "strength": 0.8
+                },
+                "another_lora": {
+                    "file": "another_lora.safetensors",
+                    "strength": 0.8
+                }
+            }
+        },
+        "anima_rapid": {
+            "default_image_size": {
+                "width": 1024,
+                "height": 1024
+            },
+            "loras": {
+                "my_lora": {
+                    "file": "my_lora.safetensors",
+                    "strength": 0.8
+                },
+                "another_lora": {
+                    "file": "another_lora.safetensors",
+                    "strength": 0.8
+                }
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ from test_helper import (
     write_json,
     valid_input,
     valid_config,
+    valid_workflow_config,
     valid_wd14_tagger_config,
 )
 
@@ -18,7 +19,6 @@ from modules.load_files import (
     IMAGE_SIZE_MAX,
     IMAGE_SIZE_MIN,
 )
-
 
 # ── validate_inputs ───────────────────────────────────────────────────────────
 
@@ -211,7 +211,23 @@ class TestLoadConfig:
         path = write_json(tmp_path / "config.json", valid_config())
         config = load_config(path)
         assert config["comfyui_url"] == "http://127.0.0.1:8188"
-        assert config["loras"]["my_lora"]["file"] == "my_lora.safetensors"
+        assert config["default_workflow"] == "sdxl"
+        assert (
+            config["workflows"]["sdxl"]["loras"]["my_lora"]["file"]
+            == "my_lora.safetensors"
+        )
+
+    def test_valid_multiple_workflows(self, tmp_path):
+        data = valid_config(
+            workflows={
+                "sdxl": valid_workflow_config(),
+                "sd15": valid_workflow_config(),
+            }
+        )
+        path = write_json(tmp_path / "config.json", data)
+        config = load_config(path)
+        assert "sdxl" in config["workflows"]
+        assert "sd15" in config["workflows"]
 
     def test_file_not_found(self, tmp_path):
         with pytest.raises(ValueError, match="設定ファイルが見つかりません"):
@@ -240,66 +256,103 @@ class TestLoadConfig:
         with pytest.raises(ValueError, match="空でない文字列"):
             load_config(path)
 
-    def test_missing_loras_key(self, tmp_path):
+    def test_missing_default_workflow_key(self, tmp_path):
         data = valid_config()
-        del data["loras"]
+        del data["default_workflow"]
         path = write_json(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="'default_workflow' キーがありません"):
+            load_config(path)
+
+    def test_default_workflow_empty(self, tmp_path):
+        path = write_json(tmp_path / "config.json", valid_config(default_workflow=""))
+        with pytest.raises(ValueError, match="空でない文字列"):
+            load_config(path)
+
+    def test_default_workflow_not_in_workflows(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json", valid_config(default_workflow="unknown")
+        )
+        with pytest.raises(ValueError, match="'workflows' に存在しません"):
+            load_config(path)
+
+    def test_missing_workflows_key(self, tmp_path):
+        data = valid_config()
+        del data["workflows"]
+        path = write_json(tmp_path / "config.json", data)
+        with pytest.raises(ValueError, match="'workflows' キーがありません"):
+            load_config(path)
+
+    def test_workflows_not_object(self, tmp_path):
+        path = write_json(tmp_path / "config.json", valid_config(workflows=[]))
+        with pytest.raises(ValueError, match="'workflows' はオブジェクト形式"):
+            load_config(path)
+
+    def test_workflow_entry_missing_default_image_size(self, tmp_path):
+        wf = valid_workflow_config()
+        del wf["default_image_size"]
+        path = write_json(
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
+        )
+        with pytest.raises(ValueError, match="'default_image_size' キーがありません"):
+            load_config(path)
+
+    def test_workflow_entry_invalid_default_image_size(self, tmp_path):
+        wf = valid_workflow_config(default_image_size={"width": 100, "height": 512})
+        path = write_json(
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
+        )
+        with pytest.raises(ValueError, match="default_image_size が不正です"):
+            load_config(path)
+
+    def test_workflow_entry_default_image_size_not_multiple_of_8(self, tmp_path):
+        wf = valid_workflow_config(default_image_size={"width": 513, "height": 512})
+        path = write_json(
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
+        )
+        with pytest.raises(ValueError, match="default_image_size が不正です"):
+            load_config(path)
+
+    def test_workflow_entry_missing_loras_key(self, tmp_path):
+        wf = valid_workflow_config()
+        del wf["loras"]
+        path = write_json(
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
+        )
         with pytest.raises(ValueError, match="'loras' キーがありません"):
             load_config(path)
 
-    def test_loras_entry_not_object(self, tmp_path):
+    def test_workflow_entry_loras_entry_not_object(self, tmp_path):
+        wf = valid_workflow_config(loras={"bad": "file.safetensors"})
         path = write_json(
-            tmp_path / "config.json", valid_config(loras={"bad": "file.safetensors"})
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
         )
         with pytest.raises(ValueError, match="オブジェクト形式"):
             load_config(path)
 
-    def test_loras_missing_file_key(self, tmp_path):
+    def test_workflow_entry_loras_missing_file_key(self, tmp_path):
+        wf = valid_workflow_config(loras={"lora": {"strength": 0.8}})
         path = write_json(
-            tmp_path / "config.json", valid_config(loras={"lora": {"strength": 0.8}})
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
         )
         with pytest.raises(ValueError, match=r"\.file は空でない文字列"):
             load_config(path)
 
-    def test_loras_missing_strength_key(self, tmp_path):
+    def test_workflow_entry_loras_missing_strength_key(self, tmp_path):
+        wf = valid_workflow_config(loras={"lora": {"file": "lora.safetensors"}})
         path = write_json(
-            tmp_path / "config.json",
-            valid_config(loras={"lora": {"file": "lora.safetensors"}}),
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
         )
         with pytest.raises(ValueError, match=r"\.strength は数値"):
             load_config(path)
 
-    def test_loras_strength_not_number(self, tmp_path):
+    def test_workflow_entry_loras_strength_not_number(self, tmp_path):
+        wf = valid_workflow_config(
+            loras={"lora": {"file": "lora.safetensors", "strength": "0.8"}}
+        )
         path = write_json(
-            tmp_path / "config.json",
-            valid_config(
-                loras={"lora": {"file": "lora.safetensors", "strength": "0.8"}}
-            ),
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
         )
         with pytest.raises(ValueError, match=r"\.strength は数値"):
-            load_config(path)
-
-    def test_missing_default_image_size_key(self, tmp_path):
-        data = valid_config()
-        del data["default_image_size"]
-        path = write_json(tmp_path / "config.json", data)
-        with pytest.raises(ValueError, match="'default_image_size' キーがありません"):
-            load_config(path)
-
-    def test_default_image_size_invalid(self, tmp_path):
-        path = write_json(
-            tmp_path / "config.json",
-            valid_config(default_image_size={"width": 100, "height": 512}),
-        )
-        with pytest.raises(ValueError, match="default_image_size が不正です"):
-            load_config(path)
-
-    def test_default_image_size_not_multiple_of_8(self, tmp_path):
-        path = write_json(
-            tmp_path / "config.json",
-            valid_config(default_image_size={"width": 513, "height": 512}),
-        )
-        with pytest.raises(ValueError, match="default_image_size が不正です"):
             load_config(path)
 
 

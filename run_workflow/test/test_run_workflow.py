@@ -10,6 +10,7 @@ from test_helper import (
     valid_input,
     valid_lora_list,
     valid_config,
+    valid_workflow_config,
 )
 
 from run_workflow import (
@@ -61,9 +62,9 @@ class TestResolveLoras:
 
 
 class TestWorkflowRunnerExecute:
-    def _make_runner(self, tmp_path) -> WorkflowRunner:
+    def _make_runner(self, tmp_path, workflow_name=None) -> WorkflowRunner:
         path = write_json(tmp_path / "config.json", valid_config())
-        return WorkflowRunner(path)
+        return WorkflowRunner(path, workflow_name=workflow_name)
 
     def _mock_client(self, outputs: list) -> MagicMock:
         mock = MagicMock()
@@ -138,7 +139,38 @@ class TestWorkflowRunnerExecute:
         runner = self._make_runner(tmp_path)
         with patch("run_workflow.ComfyUIClient", return_value=self._mock_client([])):
             runner.execute([], {"positive": "good", "negative": "bad"})
-        assert runner.parameters["image_size"] == {"width": 512, "height": 512}
+        assert (
+            runner.parameters["image_size"]
+            == valid_config()["workflows"]["sdxl"]["default_image_size"]
+        )
+
+    def test_uses_workflow_specific_loras(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        with patch("run_workflow.ComfyUIClient", return_value=self._mock_client([])):
+            runner.execute(["my_lora"], {"positive": "good", "negative": "bad"})
+        assert runner.parameters["loras"][0]["name"] == "my_lora"
+
+    def test_raises_on_unknown_workflow(self, tmp_path):
+        path = write_json(tmp_path / "config.json", valid_config())
+        with pytest.raises(ValueError, match="workflows に存在しません"):
+            WorkflowRunner(path, workflow_name="unknown_workflow")
+
+    def test_uses_default_workflow_when_not_specified(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        assert runner._workflow_name == "sdxl"
+
+    def test_uses_given_workflow_name(self, tmp_path):
+        path = write_json(
+            tmp_path / "config.json",
+            valid_config(
+                workflows={
+                    "sdxl": valid_workflow_config(),
+                    "sd15": valid_workflow_config(),
+                }
+            ),
+        )
+        runner = WorkflowRunner(path, workflow_name="sd15")
+        assert runner._workflow_name == "sd15"
 
     def test_uses_given_image_size(self, tmp_path):
         runner = self._make_runner(tmp_path)
@@ -164,9 +196,9 @@ class TestWorkflowRunnerExecute:
 
 
 class TestWorkflowRunnerRun:
-    def _make_runner(self, tmp_path) -> WorkflowRunner:
+    def _make_runner(self, tmp_path, workflow_name=None) -> WorkflowRunner:
         path = write_json(tmp_path / "config.json", valid_config())
-        return WorkflowRunner(path)
+        return WorkflowRunner(path, workflow_name=workflow_name)
 
     def _mock_client(self, outputs: list) -> MagicMock:
         mock = MagicMock()
@@ -238,7 +270,8 @@ class TestWorkflowRunnerRun:
         with patch("run_workflow.ComfyUIClient", return_value=self._mock_client([])):
             runner.run(input_path, output_path)
         result = json.loads(Path(output_path).read_text(encoding="utf-8"))
-        assert result["parameters"]["image_size"] == {"width": 512, "height": 512}
+        expected = valid_config()["workflows"]["sdxl"]["default_image_size"]
+        assert result["parameters"]["image_size"] == expected
 
     def test_invalid_image_size_writes_error_result(self, tmp_path):
         runner = self._make_runner(tmp_path)

@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -35,11 +34,22 @@ def valid_image_size(**overrides) -> dict:
     return base
 
 
+def valid_workflow_config(**overrides) -> dict:
+    base = {
+        "default_image_size": valid_image_size(),
+        "loras": valid_lora_list(),
+    }
+    base.update(overrides)
+    return base
+
+
 def valid_config(**overrides) -> dict:
     base = {
         "comfyui_url": "http://127.0.0.1:8188",
-        "default_image_size": valid_image_size(),
-        "loras": valid_lora_list(),
+        "default_workflow": "sdxl",
+        "workflows": {
+            "sdxl": valid_workflow_config(),
+        },
     }
     base.update(overrides)
     return base

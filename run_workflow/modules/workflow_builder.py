@@ -8,17 +8,21 @@ class WorkflowBuilder:
     def __init__(self, templates_dir: str):
         self.templates_dir = Path(templates_dir)
 
-    def select_template(self, lora_count: int) -> str:
-        """LoRA 数に応じたテンプレートを選択する"""
-        # LoRA 数に応じたテンプレートを選択する（template_lora_0.json 〜 template_lora_4.json）
+    def select_template(self, lora_count: int, workflow_name: str) -> str:
+        """ワークフロー名と LoRA 数に応じたテンプレートを選択する"""
         if not 0 <= lora_count <= 4:
             raise ValueError(
                 f"LoRA は 0〜4 個の範囲で指定してください（指定数: {lora_count}）"
             )
-        path = self.templates_dir / f"template_lora_{lora_count}.json"
+        workflow_dir = self.templates_dir / workflow_name
+        if not workflow_dir.exists():
+            raise ValueError(
+                f"テンプレートディレクトリが見つかりません: {workflow_name}"
+            )
+        path = workflow_dir / f"template_lora_{lora_count}.json"
         if not path.exists():
             raise ValueError(
-                f"テンプレートファイルが見つかりません: template_lora_{lora_count}.json"
+                f"テンプレートファイルが見つかりません: {workflow_name}/template_lora_{lora_count}.json"
             )
         return str(path)
 

@@ -3,15 +3,17 @@
 ComfyUI の REST API と WebSocket を使い、ワークフローを Python から自動実行するツールです。
 
 LoRA の枚数に応じてテンプレートを自動選択し、プロンプト・LoRA・画像サイズを差し込んで実行します。
+ワークフロー（モデル）ごとにテンプレート・LoRA・デフォルト画像サイズを切り替えられます。
 また、WD Timm Tagger ワークフローを使って画像のタグ文字列を取得する機能も備えています。
 
 実行結果（出力ファイル一覧・エラー情報）は `result.json` に記録されます。
 
 ## 機能
 
+- ワークフロー名でテンプレートセット・LoRA・デフォルト画像サイズを切り替え
 - LoRA 0〜4 個に対応したテンプレートの自動選択
 - プロンプト（positive / negative）と LoRA の差し込み
-- 画像サイズ（width / height）の指定（省略時は `config.json` の既定値を使用）
+- 画像サイズ（width / height）の指定（省略時はワークフロー別のデフォルト値を使用）
 - WebSocket によるリアルタイム進捗監視
 - 実行ごとにシード値をランダム生成
 - 成功・失敗を `result.json` に記録
@@ -28,17 +30,25 @@ LoRA の枚数に応じてテンプレートを自動選択し、プロンプト
 
 ## 設定
 
-**`config.json`** — ComfyUI の接続先・既定画像サイズ・LoRA マッピング・WD14 Tagger 設定を記述します。
+**`config.json`** — ComfyUI の接続先・ワークフロー別設定・WD14 Tagger 設定を記述します。
 
 ```json
 {
   "comfyui_url": "http://127.0.0.1:8188",
-  "default_image_size": {
-    "width": 512,
-    "height": 512
-  },
-  "loras": {
-    "my_lora": {"file": "my_lora.safetensors", "strength": 0.8}
+  "default_workflow": "sdxl",
+  "workflows": {
+    "sdxl": {
+      "default_image_size": {"width": 832, "height": 1216},
+      "loras": {
+        "my_lora": {"file": "my_lora.safetensors", "strength": 0.8}
+      }
+    },
+    "anima": {
+      "default_image_size": {"width": 1024, "height": 1024},
+      "loras": {
+        "my_lora": {"file": "my_lora.safetensors", "strength": 0.8}
+      }
+    }
   },
   "wd14_tagger": {
     "model_name": "wd-eva02-large-tagger-v3",
@@ -50,8 +60,9 @@ LoRA の枚数に応じてテンプレートを自動選択し、プロンプト
 
 | キー | 説明 |
 |---|---|
-| `default_image_size` | 入力 JSON で `image_size` を省略した場合に使用する既定の画像サイズ |
-| `loras` | LoRA キー名とファイル名・強度のマッピング |
+| `default_workflow` | `--workflow` を省略したときに使用するワークフロー名 |
+| `workflows.<name>.default_image_size` | 入力 JSON で `image_size` を省略した場合に使用する既定の画像サイズ |
+| `workflows.<name>.loras` | LoRA キー名とファイル名・強度のマッピング |
 | `wd14_tagger.model_name` | WD Timm Tagger で使用するモデル名 |
 | `wd14_tagger.general_threshold` | 一般タグの出力しきい値（0.0〜1.0） |
 | `wd14_tagger.character_threshold` | キャラクタータグのしきい値（0.0〜1.0） |
@@ -61,7 +72,11 @@ LoRA の枚数に応じてテンプレートを自動選択し、プロンプト
 ### CLI — 画像生成
 
 ```bash
-python run_workflow.py -i input.json -o result.json
+# ワークフローを指定して実行
+python run_workflow.py -i input.json -w sdxl -o result.json
+
+# ワークフローを省略（config.json の default_workflow を使用）
+python run_workflow.py -i input.json
 ```
 
 **引数一覧:**
@@ -69,6 +84,7 @@ python run_workflow.py -i input.json -o result.json
 | 引数 | 省略形 | 必須 | デフォルト | 説明 |
 |---|---|---|---|---|
 | `--input` | `-i` | ○ | — | 入力 JSON ファイルのパス |
+| `--workflow` | `-w` | — | config の `default_workflow` | ワークフロー名 |
 | `--output` | `-o` | — | `result_<timestamp>.json` | 結果 JSON の出力先 |
 | `--config` | `-c` | — | `config.json` | 設定ファイルのパス |
 
@@ -90,9 +106,9 @@ python run_workflow.py -i input.json -o result.json
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
-| `loras` | ○ | `config.json` の `loras` に定義したキー名を 0〜4 個指定 |
+| `loras` | ○ | 使用するワークフローの `loras` に定義したキー名を 0〜4 個指定 |
 | `prompts.positive` / `prompts.negative` | ○ | プロンプト文字列（最大 3000 文字） |
-| `image_size.width` / `image_size.height` | — | 画像サイズ（512〜2048、8 の倍数）。省略時は `default_image_size` を使用 |
+| `image_size.width` / `image_size.height` | — | 画像サイズ（512〜2048、8 の倍数）。省略時はワークフローの `default_image_size` を使用 |
 
 ### CLI — WD14 タグ付け
 
@@ -122,6 +138,10 @@ python run_workflow.py -t -g photo.jpg -c config.json
 ```python
 from run_workflow import WorkflowRunner
 
+# ワークフローを指定
+runner = WorkflowRunner("config.json", workflow_name="anima")
+
+# ワークフローを省略（config.json の default_workflow を使用）
 runner = WorkflowRunner("config.json")
 
 # image_size を指定する場合
@@ -131,7 +151,7 @@ outputs = runner.execute(
     image_size={"width": 768, "height": 1024},
 )
 
-# image_size を省略する場合（config.json の default_image_size を使用）
+# image_size を省略する場合（ワークフローの default_image_size を使用）
 outputs = runner.execute(["my_lora"], {"positive": "...", "negative": "..."})
 ```
 
@@ -161,7 +181,7 @@ print(tags)
   "status": "success",
   "prompt_id": "abc123",
   "timestamp": "2026-04-25T12:00:00",
-  "template": "templates/template_lora_1.json",
+  "template": "templates/sdxl/template_lora_1.json",
   "parameters": {
     "positive": "masterpiece, best quality, 1girl ...",
     "negative": "worst quality, bad quality ...",
@@ -175,6 +195,33 @@ print(tags)
 }
 ```
 
+## 新しいワークフローの追加手順
+
+1. `templates/<workflow_name>/` ディレクトリを作成し、`template_lora_0.json` 〜 `template_lora_4.json` を配置する
+2. テンプレートの書き換え対象ノードに以下の `_meta.title` を設定する
+
+| `_meta.title` | 書き換える内容 |
+|---|---|
+| `positive_prompt` | ポジティブプロンプト |
+| `negative_prompt` | ネガティブプロンプト |
+| `empty_latent_image` | 画像の width / height |
+| `lora_loader_1` 〜 `lora_loader_4` | LoRA ファイル名・ストレングス |
+
+3. `config.json` の `workflows` に同名のキーを追加する
+
+```json
+"workflows": {
+  "<workflow_name>": {
+    "default_image_size": {"width": 1024, "height": 1024},
+    "loras": {
+      "my_lora": {"file": "my_lora.safetensors", "strength": 0.8}
+    }
+  }
+}
+```
+
+ノードタイトルの詳細は [doc/SPEC.md](./doc/SPEC.md) を参照してください。
+
 ## テスト
 
 ```bash
@@ -183,19 +230,22 @@ python -m pytest test/
 
 ## テンプレートについて
 
-`templates/` に収録されているワークフローはサンプルです。
+`templates/` に収録されているワークフローはサンプルです。ComfyUI で作成した任意のワークフローに差し替えて使用できます。
 
-ComfyUI で作成した任意のワークフローに差し替えて使用できます（テンプレートのノード特定方法は [SPEC.md](./doc/SPEC.md) を参照）。
-
-### 画像生成テンプレート
-
-サンプルテンプレートを実際に動作させるには、ComfyUI に以下が必要です。
+### sdxl テンプレート
 
 | 種別 | 名前 |
 |---|---|
 | カスタムノード | [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) |
 | モデル | WAI-illustrious-SDXL v16.0 |
 | アップスケーラー | RealESRGAN x2 |
+
+### anima / anima_rapid テンプレート
+
+| 種別 | 名前 |
+|---|---|
+| モデル | waiANIMA v1.0 |
+| LoRA | anima-turbo-lora v0.2 |
 
 ### WD14 Tagger テンプレート
 
@@ -208,18 +258,19 @@ ComfyUI で作成した任意のワークフローに差し替えて使用でき
 ```
 run_workflow/
   run_workflow.py              # メインスクリプト（WorkflowRunner・エントリポイント）
-  config.json                  # 接続設定・既定画像サイズ・LoRAマッピング・WD14設定
+  config.json                  # 接続設定・ワークフロー別設定・WD14設定
   modules/
     load_files.py              # 設定・入力ファイルの読み込みと検証
     workflow_builder.py        # テンプレート選択・書き換え
     comfyui_client.py          # ComfyUI REST API / WebSocket クライアント
     wd14_tagger_runner.py      # WD Timm Tagger ワークフロー実行
   templates/
-    template_lora_0.json       # LoRA 0個用テンプレート
-    template_lora_1.json
-    template_lora_2.json
-    template_lora_3.json
-    template_lora_4.json
+    sdxl/                      # SDXL テンプレート
+      template_lora_0.json ... template_lora_4.json
+    anima/                     # waiANIMA テンプレート
+      template_lora_0.json ... template_lora_4.json
+    anima_rapid/               # waiANIMA 高速版テンプレート
+      template_lora_0.json ... template_lora_4.json
     template_wd14_tagger.json  # WD Timm Tagger ワークフローテンプレート
   test/
     test_helper.py
