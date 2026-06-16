@@ -10,10 +10,6 @@
   "comfyui_output_dir": "C:/path/to/ComfyUI/output",
   "run_workflow_config": "../run_workflow/config.json",
   "shutdown_time": "03:00",
-  "image_size": {
-    "vertical": {"width": 832, "height": 1216},
-    "horizontal": {"width": 1216, "height": 832}
-  },
   "reactions": {
     "processing": "⏳",
     "success": "✅",
@@ -27,7 +23,8 @@
     "file_too_large": "画像ファイルが大きすぎます（{size_mb} MB）",
     "unexpected_error": "予期しないエラーが発生しました",
     "dm_not_supported": "DM からは使用できません。サーバーのチャンネルで実行してください。",
-    "shutdown_in_progress": "ボットはシャットダウン中です。しばらくしてから再試行してください。"
+    "shutdown_in_progress": "ボットはシャットダウン中です。しばらくしてから再試行してください。",
+    "invalid_workflow": "ワークフロー '{workflow}' は存在しません。"
   }
 }
 ```
@@ -38,22 +35,10 @@
 | `comfyui_output_dir` | ComfyUI の output フォルダへの絶対パス |
 | `run_workflow_config` | `run_workflow/config.json` へのパス（相対 or 絶対） |
 | `shutdown_time` | ボットを停止する時刻（後述）。省略または `null` で停止なし |
-| `image_size` | 画像の向きごとの生成サイズ（後述） |
 | `reactions` | ボットが付けるリアクション絵文字（後述） |
 | `messages` | ボットが返信するメッセージのテンプレート（後述） |
 
-### image_size
-
-`image_orientation` の値に応じて使用する画像サイズを定義する。
-
-| キー | 説明 |
-|---|---|
-| `vertical` | 縦向き（`image_orientation: vertical`）のときに使用するサイズ |
-| `horizontal` | 横向き（`image_orientation: horizontal`）のときに使用するサイズ |
-
-- 各値は `{"width": <整数>, "height": <整数>}` の形式で記述する。
-- バリデーションルールは `run_workflow` の `image_size` と同一（512〜2048 の整数、8 の倍数）。
-- `image_orientation` が省略された場合、`image_size` は `run_workflow/config.json` の `default_image_size` が使用される（このボット側の `image_size` は参照しない）。
+> **注意**: `image_size` はこの設定ファイルでは定義しない。各ワークフローの `image_size` は `run_workflow/config.json` の `workflows.<workflow_name>.image_size` で管理する。
 
 ### shutdown_time
 
@@ -91,6 +76,7 @@ Unicode 絵文字（例: `⏳`）とカスタム絵文字（例: `<:name:id>`）
 | `unexpected_error` | なし | 予期しない例外発生時の返信 |
 | `dm_not_supported` | なし | スラッシュコマンドを DM から実行した場合の ephemeral 返信 |
 | `shutdown_in_progress` | なし | シャットダウン要求中にスラッシュコマンドを実行した場合の ephemeral 返信 |
+| `invalid_workflow` | `{workflow}` | 存在しないワークフロー名が指定された場合の返信。ワークフロー名を埋め込む |
 
 プレースホルダーを省略した場合、そのまま固定文字列として使用する。
 プレースホルダーの名前は変更・削除不可。未知のプレースホルダーを追加してもエラーにはならない（無視される）。

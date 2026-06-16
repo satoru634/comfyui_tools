@@ -29,12 +29,12 @@
 2. 自分自身のメッセージには反応しない
 3. DM（`message.guild is None`）の場合は無視する（リアクション・返信なし）
 4. シャットダウン要求中の場合は無視する（リアクション・返信なし）
-5. メッセージ本文をパースし、`loras` / `positive` / `negative` / `image_orientation` を取り出す
+5. メッセージ本文をパースし、`workflow` / `loras` / `positive` / `negative` / `image_orientation` を取り出す
 6. パース失敗時はエラーリアクション（`❌`）を付けてエラーメッセージを返信し、処理を中断する
 7. 処理中リクエストがない場合のみレート制限チェックを行い、制限中であればエラーリアクション（`❌`）を付けて返信し、処理を中断する
 8. 同時リクエスト上限チェックを行い、上限（4件）に達していればエラーリアクション（`❌`）を付けて返信し、処理を中断する
 9. 同時リクエストカウンタをインクリメントし、処理中リアクション（`⏳`）をメッセージに付ける
-10. `image_orientation` が指定されている場合は `config.json` の `image_size[image_orientation]` を取得し、`WorkflowRunner.execute(loras, prompts, image_size=...)` を呼び出す。省略時は `image_size=None` を渡す（`asyncio.to_thread()` でラップ）
+10. `parsed["workflow"]` からワークフロー名を取得し、リクエストごとに `WorkflowRunner(run_workflow_config, workflow_name=...)` を生成する。存在しないワークフロー名の場合は `ValueError` が発生するため、ボット側でキャッチして `❌` リアクションと `invalid_workflow` メッセージを返信し、処理を中断する。`image_orientation` が指定されている場合は `runner.get_image_size(image_orientation)` で画像サイズを取得し、`WorkflowRunner.execute(loras, prompts, image_size=...)` を呼び出す。省略時は `image_size=None` を渡す（`asyncio.to_thread()` でラップ）
 11. 成功時: `comfyui_output_dir` から出力画像ファイルを読み込む。各ファイルについて `Path.resolve()` で正規化したパスが `comfyui_output_dir` 配下に収まることを確認し、サイズが 10MB 未満であることを確認してから Discord に送信し、完了リアクション（`✅`）を付ける
 12. エラー時: エラーリアクション（`❌`）を付けてエラーメッセージを返信する
 13. 処理完了後（成功・エラー問わず）、同時リクエストカウンタをデクリメントし、処理中リアクション（`⏳`）を削除する
@@ -46,7 +46,7 @@
 3. シャットダウン要求中の場合は ephemeral メッセージで通知し、処理を中断する
 4. `interaction.response.send_modal(GenImageModal(...))` でモーダルを表示する
 5. ユーザーが入力して送信すると `GenImageModal.on_submit` が呼ばれる
-6. モーダルの入力値から `parsed`（`loras` / `positive` / `negative` / `image_orientation`）を直接組み立てる
+6. モーダルの入力値から `parsed`（`workflow` / `loras` / `positive` / `negative` / `image_orientation`）を直接組み立てる
 7. キーワード形式のメッセージを `interaction.response.send_message()` でチャンネルに送信する
 8. `interaction.original_response()` で送信されたメッセージオブジェクトを取得する
 9. 以降はメンションメッセージ経由のステップ 7〜13 と同じ（`message` の代わりに取得したメッセージオブジェクトを使用）
@@ -67,7 +67,7 @@
 
 | クラス | 責務 |
 |---|---|
-| `MessageParser` | メンションメッセージのテキストをパースし `loras` / `prompts` / `image_orientation` を取り出す |
+| `MessageParser` | メンションメッセージのテキストをパースし `workflow` / `loras` / `prompts` / `image_orientation` を取り出す |
 | `RateLimiter` | ユーザーごとのクールダウンとユーザー単位の同時リクエスト上限を管理し、リクエストの受付可否を判定する |
 | `GenImageModal` | `discord.ui.Modal` を継承し、`/gen_image` コマンドで表示するモーダルのフィールド定義と `on_submit` 処理を担当する |
 | `ImageBot` | `discord.Client` を継承し、`on_message`・スラッシュコマンドのイベントを処理するメインクラス。停止時刻のウォッチャータスクも管理する |

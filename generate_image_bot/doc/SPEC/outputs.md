@@ -53,6 +53,7 @@ generate_image_bot/log/YYYYMMDD/result_hhmmss_ffffff.json
   "timestamp": "2026-04-25T12:34:56",
   "user_id": 123456789,
   "username": "discord_username",
+  "workflow": "anima",
   "loras": ["lora1"],
   "positive": "masterpiece, 1girl",
   "negative": "worst quality",
@@ -68,10 +69,11 @@ generate_image_bot/log/YYYYMMDD/result_hhmmss_ffffff.json
 | `timestamp` | string | ISO 8601 形式（秒精度） |
 | `user_id` | integer | Discord ユーザー ID |
 | `username` | string | Discord ユーザー名 |
+| `workflow` | string \| null | 使用したワークフロー名（省略時は null） |
 | `loras` | array | 使用 LoRA 名のリスト |
 | `positive` | string | ポジティブプロンプト |
 | `negative` | string | ネガティブプロンプト |
-| `image_orientation` | string \| null | 画像の向き（`"vertical"` / `"horizontal"` / `null`。省略時は null） |
+| `image_orientation` | string \| null | 画像の向き（`"vertical"` / `"horizontal"` / `"square"` / `null`。省略時は null） |
 | `outputs` | array | `WorkflowRunner.execute()` の戻り値（エラー時は空配列またはエラー前の出力） |
 | `error` | string \| null | エラーメッセージ（成功時は null） |
 

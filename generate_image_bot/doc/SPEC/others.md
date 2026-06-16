@@ -30,6 +30,7 @@ python generate_image_bot.py --config /path/to/config.json
 
 ```
 ユーザー: @bot
+          workflow: anima
           loras: my_lora, another_lora
           positive: masterpiece, best quality, 1girl,
             (detailed face:1.3), solo
@@ -59,14 +60,16 @@ python generate_image_bot.py --config /path/to/config.json
 ユーザー: /gen_image
           → GenImageModal が表示される
 
+          [ワークフロー]                  anima
           [LoRAs]                        my_lora, another_lora
           [Positive]                     masterpiece, best quality, 1girl
           [Negative]                     worst quality, bad quality
-          [画像の向き (vertical / horizontal)]  vertical
+          [画像の向き (vertical / horizontal / square)]  vertical
 
           → 送信ボタンを押す
 
-ボット:   **loras**: my_lora, another_lora
+ボット:   **workflow**: anima
+          **loras**: my_lora, another_lora
           **positive**: masterpiece, best quality, 1girl
           **negative**: worst quality, bad quality
           **image_orientation**: vertical
