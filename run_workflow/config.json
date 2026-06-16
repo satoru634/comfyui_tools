@@ -7,6 +7,11 @@
                 "width": 832,
                 "height": 1216
             },
+            "image_size": {
+                "vertical":   {"width": 832,  "height": 1216},
+                "horizontal": {"width": 1216, "height": 832},
+                "square":     {"width": 1024, "height": 1024}
+            },
             "loras": {
                 "my_lora": {
                     "file": "my_lora.safetensors",
@@ -23,6 +28,11 @@
                 "width": 1024,
                 "height": 1024
             },
+            "image_size": {
+                "vertical":   {"width": 832,  "height": 1216},
+                "horizontal": {"width": 1216, "height": 832},
+                "square":     {"width": 1024, "height": 1024}
+            },
             "loras": {
                 "my_lora": {
                     "file": "my_lora.safetensors",
@@ -38,6 +48,11 @@
             "default_image_size": {
                 "width": 1024,
                 "height": 1024
+            },
+            "image_size": {
+                "vertical":   {"width": 832,  "height": 1216},
+                "horizontal": {"width": 1216, "height": 832},
+                "square":     {"width": 1024, "height": 1024}
             },
             "loras": {
                 "my_lora": {

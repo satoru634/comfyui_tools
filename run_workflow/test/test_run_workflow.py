@@ -191,6 +191,21 @@ class TestWorkflowRunnerExecute:
                 image_size={"width": 513, "height": 512},
             )
 
+    def test_get_image_size_vertical(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        size = runner.get_image_size("vertical")
+        assert size == {"width": 832, "height": 1216}
+
+    def test_get_image_size_horizontal(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        size = runner.get_image_size("horizontal")
+        assert size == {"width": 1216, "height": 832}
+
+    def test_get_image_size_square(self, tmp_path):
+        runner = self._make_runner(tmp_path)
+        size = runner.get_image_size("square")
+        assert size == {"width": 1024, "height": 1024}
+
 
 # ── WorkflowRunner.run ────────────────────────────────────────────────────────
 

@@ -34,9 +34,18 @@ def valid_image_size(**overrides) -> dict:
     return base
 
 
+def valid_image_size_orientations() -> dict:
+    return {
+        "vertical": {"width": 832, "height": 1216},
+        "horizontal": {"width": 1216, "height": 832},
+        "square": {"width": 1024, "height": 1024},
+    }
+
+
 def valid_workflow_config(**overrides) -> dict:
     base = {
         "default_image_size": valid_image_size(),
+        "image_size": valid_image_size_orientations(),
         "loras": valid_lora_list(),
     }
     base.update(overrides)

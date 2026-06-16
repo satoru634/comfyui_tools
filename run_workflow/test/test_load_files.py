@@ -312,6 +312,44 @@ class TestLoadConfig:
         with pytest.raises(ValueError, match="default_image_size が不正です"):
             load_config(path)
 
+    def test_workflow_entry_missing_image_size_key(self, tmp_path):
+        wf = valid_workflow_config()
+        del wf["image_size"]
+        path = write_json(
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
+        )
+        with pytest.raises(ValueError, match="'image_size' キーがありません"):
+            load_config(path)
+
+    @pytest.mark.parametrize("orientation", ["vertical", "horizontal", "square"])
+    def test_workflow_entry_image_size_missing_orientation_key(
+        self, tmp_path, orientation
+    ):
+        wf = valid_workflow_config()
+        del wf["image_size"][orientation]
+        path = write_json(
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
+        )
+        with pytest.raises(ValueError, match=orientation):
+            load_config(path)
+
+    def test_workflow_entry_image_size_not_object(self, tmp_path):
+        wf = valid_workflow_config(image_size="invalid")
+        path = write_json(
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
+        )
+        with pytest.raises(ValueError, match="オブジェクト形式"):
+            load_config(path)
+
+    def test_workflow_entry_image_size_entry_invalid(self, tmp_path):
+        wf = valid_workflow_config()
+        wf["image_size"]["vertical"] = {"width": 100, "height": 512}
+        path = write_json(
+            tmp_path / "config.json", valid_config(workflows={"sdxl": wf})
+        )
+        with pytest.raises(ValueError, match="image_size.vertical が不正です"):
+            load_config(path)
+
     def test_workflow_entry_missing_loras_key(self, tmp_path):
         wf = valid_workflow_config()
         del wf["loras"]

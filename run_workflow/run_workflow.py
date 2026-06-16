@@ -86,6 +86,10 @@ class WorkflowRunner:
         self.prompt_id: str | None = None
         self.parameters: dict = {}
 
+    def get_image_size(self, orientation: str) -> dict:
+        """画像の向きに対応するサイズを返す。generate_image_bot から参照される。"""
+        return self._workflow_config["image_size"][orientation]
+
     def execute(
         self, loras: list[str], prompts: dict, image_size: dict | None = None
     ) -> list[dict]:

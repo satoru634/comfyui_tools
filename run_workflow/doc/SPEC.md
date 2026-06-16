@@ -43,12 +43,22 @@ run_workflow/
   "workflows": {
     "sdxl": {
       "default_image_size": {"width": 832, "height": 1216},
+      "image_size": {
+        "vertical":   {"width": 832,  "height": 1216},
+        "horizontal": {"width": 1216, "height": 832},
+        "square":     {"width": 1024, "height": 1024}
+      },
       "loras": {
         "my_lora": {"file": "my_lora.safetensors", "strength": 0.8}
       }
     },
     "sd15": {
       "default_image_size": {"width": 512, "height": 768},
+      "image_size": {
+        "vertical":   {"width": 512,  "height": 768},
+        "horizontal": {"width": 768,  "height": 512},
+        "square":     {"width": 512,  "height": 512}
+      },
       "loras": {
         "another_lora": {"file": "another_lora.safetensors", "strength": 0.7}
       }
@@ -60,6 +70,8 @@ run_workflow/
 - `default_workflow`: `--workflow` 引数を省略した場合に使用するワークフロー名。`workflows` のキーと一致していること。
 - `workflows`: ワークフロー名をキーとした設定の辞書。
   - `default_image_size`: 入力 JSON で `image_size` を省略した場合に使用する既定の画像サイズ。
+  - `image_size`: 画像の向きごとの生成サイズ。`vertical`/`horizontal`/`square` の 3 キーが必須。`generate_image_bot` から参照される。
+    - 各値は `{"width": <整数>, "height": <整数>}` の形式。バリデーションルールは `default_image_size` と同一（512〜2048 の整数、8 の倍数）。
   - `loras`: LoRA キー名とファイル名・強度のマッピング。入力 JSON の `loras` リストで指定するキー名はここに定義する。
 
 ## 入力インターフェース
@@ -133,7 +145,7 @@ python run_workflow.py --input input.json --workflow sdxl --output result.json
 
 | クラス / モジュール | 責務 |
 |---|---|
-| `WorkflowRunner` | `WorkflowBuilder`・`ComfyUIClient` を束ねてワークフロー実行を制御するファサード。コンストラクタでワークフロー名を受け取る |
+| `WorkflowRunner` | `WorkflowBuilder`・`ComfyUIClient` を束ねてワークフロー実行を制御するファサード。コンストラクタでワークフロー名を受け取る。`get_image_size(orientation)` で向きに対応する画像サイズを返す |
 | `WorkflowBuilder` | テンプレート選択・読み込み・プロンプト/LoRA/画像サイズ/seed の書き換え。ワークフロー名に対応するサブディレクトリからテンプレートを選択する |
 | `ComfyUIClient` | ComfyUI REST API 呼び出し・WebSocket 監視 |
 | `load_files` | `config.json` と入力 JSON の読み込み・検証 (`load_config`, `load_and_validate_input`, `validate_inputs`) |

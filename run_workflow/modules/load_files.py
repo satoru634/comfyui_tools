@@ -101,6 +101,28 @@ def load_tagger_config(config_path: str) -> dict:
     return data
 
 
+_IMAGE_SIZE_ORIENTATIONS = ("vertical", "horizontal", "square")
+
+
+def _validate_workflow_image_size(name: str, image_size: dict) -> None:
+    """config.json の workflows[name].image_size を検証する。3キーすべて必須。"""
+    if not isinstance(image_size, dict):
+        raise ValueError(
+            f"config.json の 'workflows.{name}.image_size' はオブジェクト形式である必要があります"
+        )
+    for orientation in _IMAGE_SIZE_ORIENTATIONS:
+        if orientation not in image_size:
+            raise ValueError(
+                f"config.json の 'workflows.{name}.image_size' に '{orientation}' キーがありません"
+            )
+        try:
+            _validate_image_size(image_size[orientation])
+        except ValueError as e:
+            raise ValueError(
+                f"config.json の workflows.{name}.image_size.{orientation} が不正です: {e}"
+            ) from e
+
+
 def _validate_workflow_entry(name: str, entry: dict) -> None:
     """config.json の workflows[name] エントリを検証する"""
     if not isinstance(entry, dict):
@@ -117,6 +139,11 @@ def _validate_workflow_entry(name: str, entry: dict) -> None:
         raise ValueError(
             f"config.json の workflows.{name}.default_image_size が不正です: {e}"
         ) from e
+    if "image_size" not in entry:
+        raise ValueError(
+            f"config.json の 'workflows.{name}' に 'image_size' キーがありません"
+        )
+    _validate_workflow_image_size(name, entry["image_size"])
     if "loras" not in entry:
         raise ValueError(
             f"config.json の 'workflows.{name}' に 'loras' キーがありません"
