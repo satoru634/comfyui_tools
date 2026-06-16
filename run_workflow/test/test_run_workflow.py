@@ -287,6 +287,62 @@ class TestWorkflowRunnerRun:
         assert "8 の倍数" in result["error"]
 
 
+# ── main (unknown workflow) ───────────────────────────────────────────────────
+
+
+class TestMainUnknownWorkflow:
+    def test_writes_error_result_on_unknown_workflow(self, tmp_path):
+        config_path = write_json(tmp_path / "config.json", valid_config())
+        input_path = write_json(tmp_path / "input.json", valid_input())
+        output_path = str(tmp_path / "result.json")
+        with patch(
+            "sys.argv",
+            [
+                "run_workflow.py",
+                "-i",
+                input_path,
+                "-w",
+                "unknown_workflow",
+                "-o",
+                output_path,
+                "-c",
+                config_path,
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                from run_workflow import main
+
+                main()
+        assert exc_info.value.code == 1
+        result = json.loads(Path(output_path).read_text(encoding="utf-8"))
+        assert result["status"] == "error"
+        assert "unknown_workflow" in result["error"]
+
+    def test_exits_with_code_1_on_unknown_workflow(self, tmp_path):
+        config_path = write_json(tmp_path / "config.json", valid_config())
+        input_path = write_json(tmp_path / "input.json", valid_input())
+        output_path = str(tmp_path / "result.json")
+        with patch(
+            "sys.argv",
+            [
+                "run_workflow.py",
+                "-i",
+                input_path,
+                "-w",
+                "unknown_workflow",
+                "-o",
+                output_path,
+                "-c",
+                config_path,
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                from run_workflow import main
+
+                main()
+        assert exc_info.value.code == 1
+
+
 # ── write_result ──────────────────────────────────────────────────────────────
 
 

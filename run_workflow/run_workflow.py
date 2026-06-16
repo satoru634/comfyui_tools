@@ -230,9 +230,13 @@ def main():
     else:
         if not args.input:
             parser.error("--tag を指定しない場合は --input が必須です")
-        WorkflowRunner(args.config, workflow_name=args.workflow).run(
-            args.input, args.output
-        )
+        try:
+            runner = WorkflowRunner(args.config, workflow_name=args.workflow)
+        except ValueError as e:
+            write_result(args.output, "error", str(e))
+            print(f"エラー: {e}", file=sys.stderr)
+            sys.exit(1)
+        runner.run(args.input, args.output)
 
 
 if __name__ == "__main__":
