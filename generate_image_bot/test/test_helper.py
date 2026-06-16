@@ -16,10 +16,6 @@ def valid_config() -> dict:
         "discord_token": "test_token",
         "comfyui_output_dir": "C:/output",
         "run_workflow_config": "../run_workflow/config.json",
-        "image_size": {
-            "vertical": {"width": 832, "height": 1216},
-            "horizontal": {"width": 1216, "height": 832},
-        },
         "reactions": {
             "processing": "⏳",
             "success": "✅",
@@ -38,6 +34,7 @@ def valid_config() -> dict:
             "tag_image_error": "タグ付けに失敗しました: {error}",
             "tag_image_invalid_format": "画像形式が不正です。対応形式: JPEG, PNG, WEBP, GIF, BMP",
             "tag_image_resolution_too_large": "画像の解像度が大きすぎます（最大 4096x4096）",
+            "invalid_workflow": "ワークフロー '{workflow}' は存在しません。",
         },
     }
 
@@ -47,7 +44,9 @@ def write_config(path: Path, data: dict) -> str:
     return str(path)
 
 
-def make_bot_for_test(config: dict, runner, output_dir=None, wd14_runner=None) -> ImageBot:
+def make_bot_for_test(
+    config: dict, runner, output_dir=None, wd14_runner=None
+) -> ImageBot:
     if output_dir is not None:
         config = {**config, "comfyui_output_dir": str(output_dir)}
     with patch.object(discord.Client, "__init__", return_value=None):

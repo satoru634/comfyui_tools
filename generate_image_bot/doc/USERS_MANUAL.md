@@ -10,7 +10,8 @@ Discord のチャットから AI による **画像生成** と **画像タグ�
 
 - プロンプト（「描きたい要素」の英単語をカンマ区切りで並べたもの）を入力できる
 - LoRA（画風・キャラクターなどの追加モデル）を最大 4 個まで組み合わせられる
-- 画像の向き（縦 / 横）を指定できる
+- ワークフローをリクエストごとに指定して切り替えられる（省略時はデフォルト設定を使用）
+- 画像の向き（縦 / 横 / 正方形）を指定できる
 
 ### 画像タグ付け（WD14 Tagger）
 
@@ -42,6 +43,7 @@ Discord のチャットから AI による **画像生成** と **画像タグ�
 
 ```
 @ボット名
+workflow: ワークフロー名
 loras: LoRA名1, LoRA名2
 positive: 含めたい要素（何を描いてほしいか）
 negative: 除外したい要素（何を描いてほしくないか）
@@ -49,10 +51,11 @@ negative: 除外したい要素（何を描いてほしくないか）
 
 | キーワード | 必須 | 説明 |
 |---|---|---|
+| `workflow:` | いいえ | 使用するワークフロー名（省略時はデフォルトワークフローを使用） |
 | `loras:` | いいえ | 使用する LoRA 名をカンマ区切りで指定（最大 4 個） |
 | `positive:` | **はい** | 画像に含めたい要素 |
 | `negative:` | **はい** | 画像から除外したい要素 |
-| `image_orientation:` | いいえ | 画像の向き（`vertical` または `horizontal`。省略時は既定サイズで生成） |
+| `image_orientation:` | いいえ | 画像の向き（`vertical` / `horizontal` / `square`。省略時は既定サイズで生成） |
 
 ### 記入例
 
@@ -86,6 +89,22 @@ image_orientation: vertical
 positive: masterpiece, best quality, landscape
 negative: worst quality, bad quality, blurry
 image_orientation: horizontal
+```
+
+**正方形（square）で生成する場合**
+```
+@ボット名
+positive: masterpiece, best quality, 1girl, solo
+negative: worst quality, bad quality, blurry
+image_orientation: square
+```
+
+**ワークフローを指定する場合**
+```
+@ボット名
+workflow: anima
+positive: masterpiece, best quality, 1girl, solo
+negative: worst quality, bad quality, blurry
 ```
 
 ### プロンプトの複数行記入
@@ -143,10 +162,11 @@ masterpiece, 1girl, solo, long hair, blue eyes, white dress, smile, ...
 
 | フィールド | 必須 | 説明 |
 |---|---|---|
+| ワークフロー | いいえ | 使用するワークフロー名（省略時はデフォルトワークフローを使用） |
 | LoRAs | いいえ | 使用する LoRA 名をカンマ区切りで入力（最大 4 個） |
 | Positive | **はい** | 画像に含めたい要素 |
 | Negative | **はい** | 画像から除外したい要素 |
-| Image Orientation | いいえ | 画像の向き（`vertical` または `horizontal`。省略時は既定サイズで生成） |
+| Image Orientation | いいえ | 画像の向き（`vertical` / `horizontal` / `square`。省略時は既定サイズで生成） |
 
 ### 操作の流れ
 
@@ -213,11 +233,21 @@ masterpiece, 1girl, solo, long hair, blue eyes, white dress, smile, ...
 
 ---
 
-### ❌ メッセージの形式が正しくありません: image_orientation には 'vertical' または 'horizontal' を指定してください
+### ❌ メッセージの形式が正しくありません: image_orientation には 'vertical'、'horizontal'、'square' を指定してください
 
-**こんなとき：** `image_orientation:` に `vertical` / `horizontal` 以外の値を指定した場合
+**こんなとき：** `image_orientation:` に `vertical` / `horizontal` / `square` 以外の値を指定した場合
 
-**対処法：** `vertical`（縦向き）または `horizontal`（横向き）のどちらかを正確に入力してください。大文字・小文字は問いません。
+**対処法：** `vertical`（縦向き）、`horizontal`（横向き）、`square`（正方形）のいずれかを正確に入力してください。大文字・小文字は問いません。
+
+---
+
+### ❌ ワークフロー '〇〇' は存在しません。
+
+**こんなとき：** `workflow:` に登録されていないワークフロー名を指定した場合
+
+**対処法：**
+1. ワークフロー名のスペルミスがないか確認してください（大文字・小文字も区別されます）。
+2. 使用できるワークフローの名前は管理者にご確認ください。
 
 ---
 

@@ -13,16 +13,17 @@ class MessageParser:
     # メンション除去用と行頭キーワード検出用の正規表現
     _MENTION = re.compile(r"<@!?\d+>")
     _KEYWORD = re.compile(
-        r"^(loras|positive|negative|image_orientation)\s*:", re.IGNORECASE
+        r"^(workflow|loras|positive|negative|image_orientation)\s*:", re.IGNORECASE
     )
 
     def parse(self, text: str) -> dict:
-        """メンションメッセージをパースして loras / positive / negative / image_orientation を返す。
+        """メンションメッセージをパースして workflow / loras / positive / negative / image_orientation を返す。
         positive / negative が欠落している場合は ValueError を送出する。"""
         cleaned = self._MENTION.sub("", text)
         sections = self._collect_sections(cleaned)
         self._validate_required(sections)
         result = {
+            "workflow": sections.get("workflow") or None,
             "loras": self._parse_loras(sections.get("loras", "")),
             "positive": sections["positive"],
             "negative": sections["negative"],
@@ -32,7 +33,7 @@ class MessageParser:
             orientation = sections["image_orientation"].lower()
             if orientation not in VALID_ORIENTATIONS:
                 raise ValueError(
-                    f"'image_orientation' は 'vertical' または 'horizontal' で指定してください"
+                    f"'image_orientation' は 'vertical'、'horizontal'、'square' で指定してください"
                     f"（指定値: {sections['image_orientation']!r}）"
                 )
             result["image_orientation"] = orientation

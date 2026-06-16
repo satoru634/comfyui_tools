@@ -222,6 +222,7 @@ class TestImageBotHandleRequest:
     def test_image_orientation_vertical_passes_correct_image_size(self, tmp_path):
         runner = MagicMock()
         runner.execute.return_value = VALID_OUTPUTS
+        runner.get_image_size.return_value = {"width": 832, "height": 1216}
         (tmp_path / "output.png").write_bytes(b"x")
         bot = make_bot_for_test(valid_config(), runner, tmp_path)
         content = (
@@ -230,6 +231,7 @@ class TestImageBotHandleRequest:
         msg = make_message(bot.user, content)
         with patch("modules.image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
+        runner.get_image_size.assert_called_once_with("vertical")
         runner.execute.assert_called_once_with(
             [],
             {"positive": "1girl", "negative": "bad quality"},
@@ -239,28 +241,82 @@ class TestImageBotHandleRequest:
     def test_image_orientation_horizontal_passes_correct_image_size(self, tmp_path):
         runner = MagicMock()
         runner.execute.return_value = VALID_OUTPUTS
+        runner.get_image_size.return_value = {"width": 1216, "height": 832}
         (tmp_path / "output.png").write_bytes(b"x")
         bot = make_bot_for_test(valid_config(), runner, tmp_path)
         content = "<@1>\npositive: 1girl\nnegative: bad quality\nimage_orientation: horizontal"
         msg = make_message(bot.user, content)
         with patch("modules.image_bot.discord.File"):
             asyncio.run(bot._handle_request(msg))
+        runner.get_image_size.assert_called_once_with("horizontal")
         runner.execute.assert_called_once_with(
             [],
             {"positive": "1girl", "negative": "bad quality"},
             {"width": 1216, "height": 832},
         )
 
-    def test_image_orientation_invalid_sends_error(self, tmp_path):
+    def test_image_orientation_square_passes_correct_image_size(self, tmp_path):
         runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        runner.get_image_size.return_value = {"width": 1024, "height": 1024}
+        (tmp_path / "output.png").write_bytes(b"x")
         bot = make_bot_for_test(valid_config(), runner, tmp_path)
         content = (
             "<@1>\npositive: 1girl\nnegative: bad quality\nimage_orientation: square"
         )
         msg = make_message(bot.user, content)
+        with patch("modules.image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        runner.get_image_size.assert_called_once_with("square")
+        runner.execute.assert_called_once_with(
+            [],
+            {"positive": "1girl", "negative": "bad quality"},
+            {"width": 1024, "height": 1024},
+        )
+
+    def test_image_orientation_invalid_sends_error(self, tmp_path):
+        runner = MagicMock()
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        content = (
+            "<@1>\npositive: 1girl\nnegative: bad quality\nimage_orientation: diagonal"
+        )
+        msg = make_message(bot.user, content)
         asyncio.run(bot._handle_request(msg))
         msg.add_reaction.assert_called_with("❌")
         runner.execute.assert_not_called()
+
+    def test_no_image_orientation_passes_none_as_image_size(self, tmp_path):
+        runner = MagicMock()
+        runner.execute.return_value = VALID_OUTPUTS
+        (tmp_path / "output.png").write_bytes(b"x")
+        bot = make_bot_for_test(valid_config(), runner, tmp_path)
+        msg = make_message(bot.user, VALID_CONTENT)
+        with patch("modules.image_bot.discord.File"):
+            asyncio.run(bot._handle_request(msg))
+        runner.get_image_size.assert_not_called()
+        runner.execute.assert_called_once_with(
+            [], {"positive": "1girl", "negative": "bad quality"}, None
+        )
+
+    def test_unknown_workflow_sends_error(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), None, tmp_path)
+        content = "<@1>\nworkflow: nonexistent\npositive: 1girl\nnegative: bad"
+        msg = make_message(bot.user, content)
+        with patch(
+            "modules.image_bot.WorkflowRunner", side_effect=ValueError("存在しません")
+        ):
+            asyncio.run(bot._handle_request(msg))
+        msg.add_reaction.assert_called_with("❌")
+        assert "nonexistent" in msg.reply.call_args.args[0]
+
+    def test_unknown_workflow_does_not_call_execute(self, tmp_path):
+        bot = make_bot_for_test(valid_config(), None, tmp_path)
+        content = "<@1>\nworkflow: bad\npositive: 1girl\nnegative: bad"
+        msg = make_message(bot.user, content)
+        with patch(
+            "modules.image_bot.WorkflowRunner", side_effect=ValueError("存在しません")
+        ):
+            asyncio.run(bot._handle_request(msg))
 
     def test_success_reaction_skipped_when_message_deleted(self, tmp_path):
         runner = MagicMock()
@@ -841,7 +897,9 @@ class TestTagImageCommand:
     def test_resolution_too_large_sends_ephemeral_error(self, tmp_path):
         bot = self._make_bot(tmp_path)
         interaction, _, attachment = self._make_interaction()
-        attachment.read = AsyncMock(return_value=_make_valid_png_bytes(width=4097, height=100))
+        attachment.read = AsyncMock(
+            return_value=_make_valid_png_bytes(width=4097, height=100)
+        )
         asyncio.run(bot._tag_image_command(interaction, attachment))
         call_kwargs = interaction.response.send_message.call_args.kwargs
         assert call_kwargs["ephemeral"] is True
@@ -863,6 +921,7 @@ class TestTagImageCommand:
 
     def test_concurrent_limit_sends_error_reaction(self, tmp_path):
         from modules.rate_limiter import RateLimiter
+
         bot = self._make_bot(tmp_path)
         for _ in range(RateLimiter.MAX_CONCURRENT):
             bot._limiter.increment_active(99999)
@@ -877,11 +936,17 @@ class TestTagImageCommand:
         interaction, mock_message, attachment = self._make_interaction()
         mock_file_cm = patch("modules.image_bot.discord.File")
         with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("modules.image_bot._validate_image_data", return_value="PNG"))
-            stack.enter_context(patch("modules.image_bot._make_safe_filename", return_value="safe.png"))
+            stack.enter_context(
+                patch("modules.image_bot._validate_image_data", return_value="PNG")
+            )
+            stack.enter_context(
+                patch("modules.image_bot._make_safe_filename", return_value="safe.png")
+            )
             mock_file = stack.enter_context(mock_file_cm)
             asyncio.run(bot._tag_image_command(interaction, attachment))
-        mock_message.reply.assert_called_once_with("1girl, solo", file=mock_file.return_value)
+        mock_message.reply.assert_called_once_with(
+            "1girl, solo", file=mock_file.return_value
+        )
 
     def test_success_uses_safe_filename_for_discord_file(self, tmp_path):
         wd14 = MagicMock()
@@ -889,12 +954,19 @@ class TestTagImageCommand:
         bot = self._make_bot(tmp_path, wd14)
         interaction, _, attachment = self._make_interaction()
         with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("modules.image_bot._validate_image_data", return_value="PNG"))
-            stack.enter_context(patch("modules.image_bot._make_safe_filename", return_value="safe.png"))
+            stack.enter_context(
+                patch("modules.image_bot._validate_image_data", return_value="PNG")
+            )
+            stack.enter_context(
+                patch("modules.image_bot._make_safe_filename", return_value="safe.png")
+            )
             mock_file = stack.enter_context(patch("modules.image_bot.discord.File"))
             asyncio.run(bot._tag_image_command(interaction, attachment))
         _, file_kwargs = mock_file.call_args
-        assert file_kwargs.get("filename") == "safe.png" or mock_file.call_args.args[1] == "safe.png"
+        assert (
+            file_kwargs.get("filename") == "safe.png"
+            or mock_file.call_args.args[1] == "safe.png"
+        )
 
     def test_success_adds_success_reaction(self, tmp_path):
         wd14 = MagicMock()
@@ -957,32 +1029,61 @@ class TestTagImageCommand:
         assert call_args.args[1] == "safe.png"
 
 
+# ── ImageBot: workflow_names ──────────────────────────────────────────────────
+
+
+class TestImageBotWorkflowNames:
+    def test_workflow_names_returns_list_from_config(self, tmp_path):
+        wf_config = {
+            "comfyui_url": "http://localhost:8188",
+            "default_workflow": "sdxl",
+            "workflows": {"sdxl": {}, "anima": {}, "anima_rapid": {}},
+        }
+        wf_config_path = tmp_path / "run_workflow_config.json"
+        wf_config_path.write_text(json.dumps(wf_config), encoding="utf-8")
+        config = valid_config()
+        config["run_workflow_config"] = str(wf_config_path)
+        bot = make_bot_for_test(config, MagicMock(), tmp_path)
+        assert bot.workflow_names == ["sdxl", "anima", "anima_rapid"]
+
+    def test_workflow_names_returns_empty_list_when_config_not_found(self, tmp_path):
+        config = valid_config()
+        config["run_workflow_config"] = str(tmp_path / "nonexistent.json")
+        bot = make_bot_for_test(config, MagicMock(), tmp_path)
+        assert bot.workflow_names == []
+
+
 # ── _validate_image_data / _make_safe_filename ────────────────────────────────
 
 
 class TestValidateImageData:
     def test_valid_png_returns_format(self):
         from modules.image_bot import _validate_image_data
+
         result = _validate_image_data(_make_valid_png_bytes())
         assert result == "PNG"
 
     def test_invalid_bytes_raises(self):
         from modules.image_bot import _validate_image_data
+
         with pytest.raises(ValueError, match="tag_image_invalid_format"):
             _validate_image_data(b"not an image")
 
     def test_oversized_width_raises(self):
         from modules.image_bot import _validate_image_data
+
         with pytest.raises(ValueError, match="tag_image_resolution_too_large"):
             _validate_image_data(_make_valid_png_bytes(width=4097, height=100))
 
     def test_oversized_height_raises(self):
         from modules.image_bot import _validate_image_data
+
         with pytest.raises(ValueError, match="tag_image_resolution_too_large"):
             _validate_image_data(_make_valid_png_bytes(width=100, height=4097))
 
     def test_exactly_max_resolution_is_allowed(self):
         from modules.image_bot import _validate_image_data
+
         result = _validate_image_data(_make_valid_png_bytes(width=4096, height=4096))
         assert result == "PNG"
 
@@ -990,12 +1091,15 @@ class TestValidateImageData:
 class TestMakeSafeFilename:
     def test_returns_jpg_for_jpeg(self):
         from modules.image_bot import _make_safe_filename
+
         assert _make_safe_filename("JPEG").endswith(".jpg")
 
     def test_returns_png_for_png(self):
         from modules.image_bot import _make_safe_filename
+
         assert _make_safe_filename("PNG").endswith(".png")
 
     def test_filenames_differ_between_calls(self):
         from modules.image_bot import _make_safe_filename
+
         assert _make_safe_filename("PNG") != _make_safe_filename("PNG")

@@ -98,6 +98,7 @@ class TestLoadConfig:
             "tag_image_error",
             "tag_image_invalid_format",
             "tag_image_resolution_too_large",
+            "invalid_workflow",
         ],
     )
     def test_missing_message_key(self, tmp_path, key):
@@ -122,6 +123,7 @@ class TestLoadConfig:
             "tag_image_error",
             "tag_image_invalid_format",
             "tag_image_resolution_too_large",
+            "invalid_workflow",
         ],
     )
     def test_message_value_not_string(self, tmp_path, key):
@@ -198,40 +200,4 @@ class TestLoadConfigShutdownTime:
         data = {**valid_config(), "shutdown_time": 300}
         path = write_config(tmp_path / "config.json", data)
         with pytest.raises(ValueError, match="shutdown_time"):
-            load_config(path)
-
-    def test_missing_image_size_key(self, tmp_path):
-        data = valid_config()
-        del data["image_size"]
-        path = write_config(tmp_path / "config.json", data)
-        with pytest.raises(ValueError, match="'image_size' キーがありません"):
-            load_config(path)
-
-    @pytest.mark.parametrize("orientation", ["vertical", "horizontal"])
-    def test_missing_image_size_orientation_key(self, tmp_path, orientation):
-        data = valid_config()
-        del data["image_size"][orientation]
-        path = write_config(tmp_path / "config.json", data)
-        with pytest.raises(ValueError, match=orientation):
-            load_config(path)
-
-    def test_image_size_value_not_object(self, tmp_path):
-        data = valid_config()
-        data["image_size"]["vertical"] = 512
-        path = write_config(tmp_path / "config.json", data)
-        with pytest.raises(ValueError, match="オブジェクト形式"):
-            load_config(path)
-
-    def test_image_size_width_out_of_range(self, tmp_path):
-        data = valid_config()
-        data["image_size"]["vertical"]["width"] = 100
-        path = write_config(tmp_path / "config.json", data)
-        with pytest.raises(ValueError, match="512〜2048"):
-            load_config(path)
-
-    def test_image_size_not_multiple_of_8(self, tmp_path):
-        data = valid_config()
-        data["image_size"]["horizontal"]["height"] = 833
-        path = write_config(tmp_path / "config.json", data)
-        with pytest.raises(ValueError, match="8 の倍数"):
             load_config(path)

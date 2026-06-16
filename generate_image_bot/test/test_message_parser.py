@@ -123,7 +123,32 @@ class TestMessageParser:
         result = self.parser.parse(text)
         assert result["image_orientation"] == "vertical"
 
-    def test_image_orientation_invalid_raises(self):
+    def test_image_orientation_square(self):
         text = "<@123456>\npositive: 1girl\nnegative: bad\nimage_orientation: square"
-        with pytest.raises(ValueError, match="vertical.*horizontal"):
+        result = self.parser.parse(text)
+        assert result["image_orientation"] == "square"
+
+    def test_image_orientation_invalid_raises(self):
+        text = "<@123456>\npositive: 1girl\nnegative: bad\nimage_orientation: diagonal"
+        with pytest.raises(ValueError, match="vertical"):
             self.parser.parse(text)
+
+    def test_workflow_omitted_returns_none(self):
+        text = "<@123456>\npositive: 1girl\nnegative: bad"
+        result = self.parser.parse(text)
+        assert result["workflow"] is None
+
+    def test_workflow_specified(self):
+        text = "<@123456>\nworkflow: anima\npositive: 1girl\nnegative: bad"
+        result = self.parser.parse(text)
+        assert result["workflow"] == "anima"
+
+    def test_workflow_case_preserved(self):
+        text = "<@123456>\nworkflow: AnimaRapid\npositive: 1girl\nnegative: bad"
+        result = self.parser.parse(text)
+        assert result["workflow"] == "AnimaRapid"
+
+    def test_workflow_empty_returns_none(self):
+        text = "<@123456>\nworkflow:\npositive: 1girl\nnegative: bad"
+        result = self.parser.parse(text)
+        assert result["workflow"] is None

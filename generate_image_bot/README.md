@@ -8,10 +8,11 @@ Discord から ComfyUI に画像生成を指示し、生成された画像を Di
 
 ## 機能
 
-- **メンションメッセージ**によるプロンプト入力（キーワード形式: `positive:` / `negative:` / `loras:` / `image_orientation:`）
+- **メンションメッセージ**によるプロンプト入力（キーワード形式: `workflow:` / `positive:` / `negative:` / `loras:` / `image_orientation:`）
 - **スラッシュコマンド**（`/gen_image`）によるモーダル入力で画像生成
 - **スラッシュコマンド**（`/tag_image`）による画像タグ付け（WD Timm Tagger 使用）
-- 画像の向き（`vertical` / `horizontal`）を指定して画像サイズを切り替え（省略時は `run_workflow/config.json` の既定値を使用）
+- ワークフローをリクエストごとに指定して切り替え（省略時は `run_workflow/config.json` の `default_workflow` を使用）
+- 画像の向き（`vertical` / `horizontal` / `square`）を指定して画像サイズを切り替え（省略時は `run_workflow/config.json` の既定値を使用）
 - ユーザー単位のレート制限（30秒クールダウン）
 - 複数ユーザーのリクエストを並行処理（同一ユーザーは最大 4 件まで同時送信可能）
 - 生成結果を Discord に画像添付で返信
@@ -74,10 +75,6 @@ Bot の権限（Bot Permissions）:
   "comfyui_output_dir": "C:/path/to/ComfyUI/output",
   "run_workflow_config": "../run_workflow/config.json",
   "shutdown_time": "03:00",
-  "image_size": {
-    "vertical": {"width": 832, "height": 1216},
-    "horizontal": {"width": 1216, "height": 832}
-  },
   "reactions": {
     "processing": "⏳",
     "success": "✅",
@@ -95,7 +92,8 @@ Bot の権限（Bot Permissions）:
     "tag_image_invalid_type": "画像ファイルのみ対応しています。",
     "tag_image_error": "タグ付けに失敗しました:\n{error}",
     "tag_image_invalid_format": "画像形式が不正です。対応形式: JPEG, PNG, WEBP, GIF, BMP",
-    "tag_image_resolution_too_large": "画像の解像度が大きすぎます（最大 4096x4096）"
+    "tag_image_resolution_too_large": "画像の解像度が大きすぎます（最大 4096x4096）",
+    "invalid_workflow": "ワークフロー '{workflow}' は存在しません。"
   }
 }
 ```
@@ -112,9 +110,10 @@ Bot の権限（Bot Permissions）:
 | `comfyui_output_dir` | ComfyUI の output フォルダへの絶対パス |
 | `run_workflow_config` | `run_workflow/config.json` へのパス |
 | `shutdown_time` | ボットを停止する時刻（`"hh:mm"` 形式。省略または `null` で停止なし） |
-| `image_size` | `vertical` / `horizontal` それぞれの画像サイズ（`width` / `height`。整数、512〜2048、8 の倍数） |
 | `reactions` | 処理中 / 成功 / エラー時に付与するリアクション絵文字 |
 | `messages` | ボットが返信するメッセージのテンプレート |
+
+画像サイズ（`vertical` / `horizontal` / `square`）は `run_workflow/config.json` 内の各ワークフローに定義します。
 
 Unicode 絵文字（例: `⏳`）とカスタム絵文字（例: `<:name:id>`）の両方を `reactions` に指定できます。
 
@@ -141,6 +140,7 @@ python generate_image_bot.py --config /path/to/config.json
 
 ```
 @bot
+workflow: anima
 loras: my_lora, another_lora
 positive: masterpiece, best quality, 1girl,
   (detailed face:1.3), solo
@@ -148,9 +148,10 @@ negative: worst quality, bad quality, blurry
 image_orientation: vertical
 ```
 
+- `workflow:` は省略可能（省略時は `run_workflow/config.json` の `default_workflow` を使用）
 - `loras:` は省略可能（省略時は LoRA なしで生成）
 - `positive:` / `negative:` は必須
-- `image_orientation:` は省略可能（`vertical` または `horizontal`。省略時は `run_workflow/config.json` の既定サイズを使用）
+- `image_orientation:` は省略可能（`vertical` / `horizontal` / `square`。省略時は `run_workflow/config.json` の既定サイズを使用）
 - プロンプトは複数行で記述できます
 
 **スラッシュコマンド — `/gen_image`（画像生成）**
@@ -213,6 +214,7 @@ image_orientation: vertical
   "timestamp": "2026-04-25T12:34:56",
   "user_id": 123456789,
   "username": "discord_username",
+  "workflow": "anima",
   "loras": ["my_lora"],
   "positive": "masterpiece, 1girl",
   "negative": "worst quality",

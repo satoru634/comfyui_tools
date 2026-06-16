@@ -15,6 +15,7 @@ MESSAGE_KEYS = (
     "tag_image_error",
     "tag_image_invalid_format",
     "tag_image_resolution_too_large",
+    "invalid_workflow",
 )
 
 # 10MB: Discord の添付ファイル上限に合わせた閾値
@@ -24,7 +25,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 MAX_PROMPT_LENGTH = 3000
 
 # 画像の向き指定の有効な値
-VALID_ORIENTATIONS = ("vertical", "horizontal")
+VALID_ORIENTATIONS = ("vertical", "horizontal", "square")
 
 # WSServerHandshakeError 発生時の再接続待機秒数
 RECONNECT_WAIT = 30

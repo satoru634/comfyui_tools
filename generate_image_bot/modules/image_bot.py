@@ -2,6 +2,7 @@
 
 import asyncio
 import io
+import json
 import math
 import sys
 import uuid
@@ -81,8 +82,13 @@ class ImageBot(discord.Client):
         self._output_dir = Path(config["comfyui_output_dir"]).resolve()
         # ログディレクトリは generate_image_bot/ 直下の log/ に固定する
         self._log_dir = Path(__file__).parent.parent / "log"
-        self._runner = runner or WorkflowRunner(config["run_workflow_config"])
-        self._wd14_runner = wd14_runner or Wd14TaggerRunner(config["run_workflow_config"])
+        # テスト用インジェクション: None の場合はリクエストごとに WorkflowRunner を生成する
+        self._runner = runner
+        self._run_workflow_config = config["run_workflow_config"]
+        self._workflow_names = self._load_workflow_names()
+        self._wd14_runner = wd14_runner or Wd14TaggerRunner(
+            config["run_workflow_config"]
+        )
         # shutdown_time が設定されている場合はタプル (hour, minute) で保持する
         st = config.get("shutdown_time")
         self._shutdown_time: tuple[int, int] | None = (
@@ -96,6 +102,19 @@ class ImageBot(discord.Client):
     @property
     def log_dir(self) -> Path:
         return self._log_dir
+
+    @property
+    def workflow_names(self) -> list[str]:
+        return self._workflow_names
+
+    def _load_workflow_names(self) -> list[str]:
+        try:
+            data = json.loads(
+                Path(self._run_workflow_config).read_text(encoding="utf-8")
+            )
+            return list(data.get("workflows", {}).keys())
+        except Exception:
+            return []
 
     async def setup_hook(self):
         """on_ready より前に呼び出される初期化フック。スラッシュコマンドを登録する。"""
@@ -185,7 +204,9 @@ class ImageBot(discord.Client):
             return
         if image.size >= MAX_FILE_SIZE:
             await interaction.response.send_message(
-                self._fmt("file_too_large", size_mb=f"{image.size / (1024 * 1024):.1f}"),
+                self._fmt(
+                    "file_too_large", size_mb=f"{image.size / (1024 * 1024):.1f}"
+                ),
                 ephemeral=True,
             )
             return
@@ -193,9 +214,7 @@ class ImageBot(discord.Client):
         try:
             image_format = await asyncio.to_thread(_validate_image_data, image_data)
         except ValueError as e:
-            await interaction.response.send_message(
-                self._fmt(str(e)), ephemeral=True
-            )
+            await interaction.response.send_message(self._fmt(str(e)), ephemeral=True)
             return
         safe_filename = _make_safe_filename(image_format)
         write_discord_log(
@@ -242,7 +261,9 @@ class ImageBot(discord.Client):
                     self._wd14_runner.tag, image_data, safe_filename
                 )
             except ValueError as e:
-                await self._reply_error(message, self._fmt("tag_image_error", error=str(e)))
+                await self._reply_error(
+                    message, self._fmt("tag_image_error", error=str(e))
+                )
                 return
             except Exception:
                 await self._reply_error(message, self._fmt("unexpected_error"))
@@ -337,22 +358,36 @@ class ImageBot(discord.Client):
         user_id = user.id
         username = user.name
 
-        # image_orientation が指定されている場合は config の image_size から対応サイズを取得する
+        # テスト用インジェクションがある場合はそれを使い、なければリクエストごとに生成する
+        workflow_name = parsed.get("workflow")
+        if self._runner is not None:
+            runner = self._runner
+        else:
+            try:
+                runner = WorkflowRunner(
+                    self._run_workflow_config, workflow_name=workflow_name
+                )
+            except ValueError:
+                await self._reply_error(
+                    message,
+                    self._fmt("invalid_workflow", workflow=workflow_name or ""),
+                )
+                return
+
+        # image_orientation が指定されている場合は runner からサイズを取得する
         orientation = parsed.get("image_orientation")
-        image_size = self._config["image_size"][orientation] if orientation else None
+        image_size = runner.get_image_size(orientation) if orientation else None
 
         # WorkflowRunner.execute() は同期処理のため to_thread でイベントループをブロックしない
         try:
             outputs = await asyncio.to_thread(
-                self._runner.execute, parsed["loras"], prompts, image_size
+                runner.execute, parsed["loras"], prompts, image_size
             )
         except ValueError as e:
-            # LoRA 名やプロンプトの検証エラー等、想定内の失敗
             write_log(self._log_dir, user_id, username, parsed, "error", [], str(e))
             await self._reply_error(message, self._fmt("execution_error", error=str(e)))
             return
         except Exception as e:
-            # 接続断など予期しない例外はユーザーには詳細を見せない
             write_log(self._log_dir, user_id, username, parsed, "error", [], str(e))
             await self._reply_error(message, self._fmt("unexpected_error"))
             return

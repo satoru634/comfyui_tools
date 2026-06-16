@@ -2,7 +2,9 @@
 
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import discord
 
 from modules.gen_image_modal import GenImageModal
 
@@ -18,6 +20,7 @@ class TestGenImageModal:
     def _make_test_modal(
         self,
         tmp_path,
+        workflow_val: str = "",
         loras_val: str = "",
         positive_val: str = "1girl",
         negative_val: str = "bad quality",
@@ -27,6 +30,7 @@ class TestGenImageModal:
         bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
         modal = object.__new__(GenImageModal)
         modal._bot = bot
+        modal.workflow = MagicMock(value=workflow_val)
         modal.loras = MagicMock(value=loras_val)
         modal.positive = MagicMock(value=positive_val)
         modal.negative = MagicMock(value=negative_val)
@@ -56,6 +60,7 @@ class TestGenImageModal:
         assert parsed["positive"] == "1girl"
         assert parsed["negative"] == "bad quality"
         assert parsed["image_orientation"] is None
+        assert parsed["workflow"] is None
 
     def test_build_parsed_no_loras_returns_empty_list(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path, loras_val="")
@@ -92,14 +97,30 @@ class TestGenImageModal:
         parsed = modal._build_parsed()
         assert parsed["image_orientation"] is None
 
+    def test_build_parsed_orientation_square(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path, orientation_val="square")
+        parsed = modal._build_parsed()
+        assert parsed["image_orientation"] == "square"
+
     def test_build_parsed_orientation_invalid_raises(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path, orientation_val="diagonal")
-        with pytest.raises(ValueError, match="vertical.*horizontal"):
+        with pytest.raises(ValueError, match="vertical"):
             modal._build_parsed()
+
+    def test_build_parsed_workflow_specified(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path, workflow_val="anima")
+        parsed = modal._build_parsed()
+        assert parsed["workflow"] == "anima"
+
+    def test_build_parsed_workflow_empty_returns_none(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path, workflow_val="")
+        parsed = modal._build_parsed()
+        assert parsed["workflow"] is None
 
     def test_build_message_text_with_loras(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path)
         parsed = {
+            "workflow": None,
             "loras": ["lora1", "lora2"],
             "positive": "1girl",
             "negative": "bad",
@@ -111,6 +132,7 @@ class TestGenImageModal:
     def test_build_message_text_without_loras(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path)
         parsed = {
+            "workflow": None,
             "loras": [],
             "positive": "1girl",
             "negative": "bad",
@@ -123,6 +145,7 @@ class TestGenImageModal:
     def test_build_message_text_with_orientation(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path)
         parsed = {
+            "workflow": None,
             "loras": [],
             "positive": "1girl",
             "negative": "bad",
@@ -134,6 +157,7 @@ class TestGenImageModal:
     def test_build_message_text_without_orientation_omits_line(self, tmp_path):
         modal, _ = self._make_test_modal(tmp_path)
         parsed = {
+            "workflow": None,
             "loras": [],
             "positive": "1girl",
             "negative": "bad",
@@ -141,6 +165,30 @@ class TestGenImageModal:
         }
         text = modal._build_message_text(parsed)
         assert "**image_orientation**" not in text
+
+    def test_build_message_text_with_workflow(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path)
+        parsed = {
+            "workflow": "anima",
+            "loras": [],
+            "positive": "1girl",
+            "negative": "bad",
+            "image_orientation": None,
+        }
+        text = modal._build_message_text(parsed)
+        assert text.startswith("**workflow**: anima\n")
+
+    def test_build_message_text_without_workflow_omits_line(self, tmp_path):
+        modal, _ = self._make_test_modal(tmp_path)
+        parsed = {
+            "workflow": None,
+            "loras": [],
+            "positive": "1girl",
+            "negative": "bad",
+            "image_orientation": None,
+        }
+        text = modal._build_message_text(parsed)
+        assert "**workflow**" not in text
 
     def test_on_submit_sends_keyword_format_message(self, tmp_path):
         modal, bot = self._make_test_modal(
@@ -165,6 +213,7 @@ class TestGenImageModal:
     def test_on_submit_calls_process_generation_with_parsed(self, tmp_path):
         modal, bot = self._make_test_modal(
             tmp_path,
+            workflow_val="anima",
             loras_val="lora1",
             positive_val="masterpiece",
             negative_val="worst",
@@ -176,6 +225,7 @@ class TestGenImageModal:
         mock_process.assert_called_once()
         msg_arg, parsed_arg, user_arg = mock_process.call_args.args
         assert msg_arg is mock_message
+        assert parsed_arg["workflow"] == "anima"
         assert parsed_arg["loras"] == ["lora1"]
         assert parsed_arg["positive"] == "masterpiece"
         assert parsed_arg["negative"] == "worst"
@@ -190,6 +240,27 @@ class TestGenImageModal:
         _, _, user_arg = mock_process.call_args.args
         assert user_arg.id == 12345
         assert user_arg.name == "modaluser"
+
+    def test_init_updates_workflow_label_with_workflow_names(self, tmp_path):
+        """ワークフロー名が存在する場合、__init__ でラベルに名前一覧が追記される。"""
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._workflow_names = ["sdxl", "anima", "anima_rapid"]
+        with patch.object(discord.ui.Modal, "__init__", return_value=None):
+            with patch.object(GenImageModal, "add_item"):
+                modal = GenImageModal(bot)
+        assert (
+            modal.workflow._underlying.label
+            == "ワークフロー (sdxl / anima / anima_rapid)"
+        )
+
+    def test_init_does_not_update_label_when_no_workflow_names(self, tmp_path):
+        """ワークフロー名が空の場合、ラベルはデフォルト値のままになる。"""
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._workflow_names = []
+        with patch.object(discord.ui.Modal, "__init__", return_value=None):
+            with patch.object(GenImageModal, "add_item"):
+                modal = GenImageModal(bot)
+        assert modal.workflow._underlying.label == "ワークフロー"
 
     def test_on_submit_invalid_orientation_sends_ephemeral_error(self, tmp_path):
         modal, bot = self._make_test_modal(tmp_path, orientation_val="diagonal")
