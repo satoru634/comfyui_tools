@@ -28,7 +28,7 @@ Execution results (output file list and error information) are recorded in `resu
 
 ## Setup
 
-Refer to the [Setup section](../../README.md#setup) in the repository root.
+Refer to the [Setup section](../../doc/README_english.md#-setup) in the repository root.
 
 ## Configuration
 

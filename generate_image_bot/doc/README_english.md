@@ -65,7 +65,7 @@ Bot Permissions:
 
 ### 2. Virtual Environment Setup
 
-Refer to the [Setup section](../../README.md#setup) in the repository root.
+Refer to the [Setup section](../../doc/README_english.md#-setup) in the repository root.
 
 ## Configuration
 

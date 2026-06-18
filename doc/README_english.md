@@ -38,9 +38,9 @@ source .venv/bin/activate
 
 | Tool | Description |
 |---|---|
-| [`run_workflow/`](../run_workflow/README.md) | A tool for automatically running ComfyUI workflows from Python |
-| [`generate_image_bot/`](../generate_image_bot/README.md) | A Discord bot that instructs ComfyUI to generate images via mentions and returns the generated images |
-| [`captioning_tool/`](../captioning_tool/README.md) | A tool that batch-tags images in a directory using WD Timm Tagger and generates `.txt` caption files |
+| [`run_workflow/`](../run_workflow/doc/README_english.md) | A tool for automatically running ComfyUI workflows from Python |
+| [`generate_image_bot/`](../generate_image_bot/doc/README_english.md) | A Discord bot that instructs ComfyUI to generate images via mentions and returns the generated images |
+| [`captioning_tool/`](../captioning_tool/doc/README_english.md) | A tool that batch-tags images in a directory using WD Timm Tagger and generates `.txt` caption files |
 
 ## ⚙️ Submodules
 
