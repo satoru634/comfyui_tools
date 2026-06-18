@@ -6,6 +6,8 @@ Discord から ComfyUI に画像生成を指示し、生成された画像を Di
 
 ボットの動作記録（起動・終了・Discord イベント・画像生成結果）は `log/YYYYMMDD/` ディレクトリに JSON 形式で記録されます。
 
+**✨ English version is [here](./doc/README_english.md).**
+
 ## 機能
 
 - **メンションメッセージ**によるプロンプト入力（キーワード形式: `workflow:` / `positive:` / `negative:` / `loras:` / `image_orientation:`）

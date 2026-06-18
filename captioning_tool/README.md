@@ -5,6 +5,8 @@
 
 LoRA 学習用データセットのキャプションファイル整備を主な用途として想定しています。
 
+**✨ English version is [here](./doc/README_english.md).**
+
 ## 機能
 
 - ディレクトリ内の画像を一括タグ付け（対応拡張子: `.jpg` `.jpeg` `.png` `.webp`）

@@ -8,6 +8,8 @@ LoRA の枚数に応じてテンプレートを自動選択し、プロンプト
 
 実行結果（出力ファイル一覧・エラー情報）は `result.json` に記録されます。
 
+**✨ English version is [here](./doc/README_english.md).**
+
 ## 機能
 
 - ワークフロー名でテンプレートセット・LoRA・デフォルト画像サイズを切り替え
