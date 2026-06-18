@@ -85,6 +85,7 @@ class ImageBot(discord.Client):
         # テスト用インジェクション: None の場合はリクエストごとに WorkflowRunner を生成する
         self._runner = runner
         self._run_workflow_config = config["run_workflow_config"]
+        self._default_workflow = self._get_default_workflow()
         self._workflow_names = self._load_workflow_names()
         self._wd14_runner = wd14_runner or Wd14TaggerRunner(
             config["run_workflow_config"]
@@ -104,8 +105,21 @@ class ImageBot(discord.Client):
         return self._log_dir
 
     @property
+    def default_workflow(self) -> str:
+        return self._default_workflow
+
+    @property
     def workflow_names(self) -> list[str]:
         return self._workflow_names
+
+    def _get_default_workflow(self) -> str:
+        try:
+            data = json.loads(
+                Path(self._run_workflow_config).read_text(encoding="utf-8")
+            )
+            return data.get("default_workflow", "")
+        except Exception:
+            return ""
 
     def _load_workflow_names(self) -> list[str]:
         try:

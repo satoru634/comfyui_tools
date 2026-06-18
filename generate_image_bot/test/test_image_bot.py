@@ -1029,6 +1029,30 @@ class TestTagImageCommand:
         assert call_args.args[1] == "safe.png"
 
 
+# ── ImageBot: default_workflow ────────────────────────────────────────────────
+
+
+class TestImageBotDefaultWorkflow:
+    def test_default_workflow_returns_value_from_config(self, tmp_path):
+        wf_config = {
+            "comfyui_url": "http://localhost:8188",
+            "default_workflow": "sdxl",
+            "workflows": {"sdxl": {}},
+        }
+        wf_config_path = tmp_path / "run_workflow_config.json"
+        wf_config_path.write_text(json.dumps(wf_config), encoding="utf-8")
+        config = valid_config()
+        config["run_workflow_config"] = str(wf_config_path)
+        bot = make_bot_for_test(config, MagicMock(), tmp_path)
+        assert bot.default_workflow == "sdxl"
+
+    def test_default_workflow_returns_empty_string_when_config_missing(self, tmp_path):
+        config = valid_config()
+        config["run_workflow_config"] = str(tmp_path / "nonexistent.json")
+        bot = make_bot_for_test(config, MagicMock(), tmp_path)
+        assert bot.default_workflow == ""
+
+
 # ── ImageBot: workflow_names ──────────────────────────────────────────────────
 
 

@@ -271,3 +271,22 @@ class TestGenImageModal:
         call_kwargs = interaction.response.send_message.call_args.kwargs
         assert call_kwargs.get("ephemeral") is True
         bot.process_generation.assert_not_called()
+
+    def test_init_label_falls_back_when_workflow_names_too_long(self, tmp_path):
+        """ワークフロー名一覧を含む候補ラベルが45文字を超える場合、デフォルトラベルを使用する。"""
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        # "ワークフロー (very_long_workflow_name_1 / very_long_workflow_name_2)" は62文字 > 45
+        bot._workflow_names = ["very_long_workflow_name_1", "very_long_workflow_name_2"]
+        with patch.object(discord.ui.Modal, "__init__", return_value=None):
+            with patch.object(GenImageModal, "add_item"):
+                modal = GenImageModal(bot)
+        assert modal.workflow._underlying.label == "ワークフロー"
+
+    def test_init_workflow_placeholder_contains_default_workflow(self, tmp_path):
+        """プレースホルダーにデフォルトワークフロー名が反映される。"""
+        bot = make_bot_for_test(valid_config(), MagicMock(), tmp_path)
+        bot._default_workflow = "sdxl"
+        with patch.object(discord.ui.Modal, "__init__", return_value=None):
+            with patch.object(GenImageModal, "add_item"):
+                modal = GenImageModal(bot)
+        assert "sdxl" in modal.workflow._underlying.placeholder

@@ -29,10 +29,12 @@ class GenImageModal(discord.ui.Modal, title="画像生成"):
             if len(candidate) <= _MAX_LABEL_LENGTH:
                 wf_label = candidate
 
+        wf_placeholder = f"省略時は ({bot.default_workflow}) を使用"
+
         self.workflow = discord.ui.TextInput(
             label=wf_label,
             required=False,
-            placeholder="省略時はデフォルトワークフローを使用",
+            placeholder=wf_placeholder,
             max_length=64,
         )
         self.loras = discord.ui.TextInput(
