@@ -49,7 +49,7 @@ def resolve_loras(lora_names: list[str], lora_list: dict) -> list[dict]:
     resolved = []
     for name in lora_names:
         if name not in lora_list:
-            raise ValueError(f"LoRA '{name}' が lora_list.json に存在しません")
+            raise ValueError(f"LoRA '{name}' が config.json の loras 設定に存在しません")
         entry = lora_list[name]
         resolved.append(
             {"name": name, "file": entry["file"], "strength": entry["strength"]}

@@ -47,13 +47,13 @@ class TestResolveLoras:
 
     def test_unknown_lora_name(self):
         with pytest.raises(
-            ValueError, match="'unknown_lora' が lora_list.json に存在しません"
+            ValueError, match="'unknown_lora' が config.json の loras 設定に存在しません"
         ):
             resolve_loras(["unknown_lora"], valid_lora_list())
 
     def test_partially_unknown_lora_names(self):
         with pytest.raises(
-            ValueError, match="'missing' が lora_list.json に存在しません"
+            ValueError, match="'missing' が config.json の loras 設定に存在しません"
         ):
             resolve_loras(["my_lora", "missing"], valid_lora_list())
 
@@ -116,7 +116,7 @@ class TestWorkflowRunnerExecute:
 
     def test_raises_on_unknown_lora(self, tmp_path):
         runner = self._make_runner(tmp_path)
-        with pytest.raises(ValueError, match="lora_list.json に存在しません"):
+        with pytest.raises(ValueError, match="config.json の loras 設定に存在しません"):
             runner.execute(["unknown_lora"], {"positive": "good", "negative": "bad"})
 
     def test_raises_on_prompt_too_long(self, tmp_path):

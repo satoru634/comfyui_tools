@@ -39,12 +39,22 @@ LoRA の枚数に応じてテンプレートを自動選択し、プロンプト
   "workflows": {
     "sdxl": {
       "default_image_size": {"width": 832, "height": 1216},
+      "image_size": {
+        "vertical":   {"width": 832,  "height": 1216},
+        "horizontal": {"width": 1216, "height": 832},
+        "square":     {"width": 1024, "height": 1024}
+      },
       "loras": {
         "my_lora": {"file": "my_lora.safetensors", "strength": 0.8}
       }
     },
     "anima": {
       "default_image_size": {"width": 1024, "height": 1024},
+      "image_size": {
+        "vertical":   {"width": 832,  "height": 1216},
+        "horizontal": {"width": 1216, "height": 832},
+        "square":     {"width": 1024, "height": 1024}
+      },
       "loras": {
         "my_lora": {"file": "my_lora.safetensors", "strength": 0.8}
       }
@@ -62,6 +72,7 @@ LoRA の枚数に応じてテンプレートを自動選択し、プロンプト
 |---|---|
 | `default_workflow` | `--workflow` を省略したときに使用するワークフロー名 |
 | `workflows.<name>.default_image_size` | 入力 JSON で `image_size` を省略した場合に使用する既定の画像サイズ |
+| `workflows.<name>.image_size` | 向きごとの画像サイズ（`vertical`/`horizontal`/`square` の 3 キーが必須）。`generate_image_bot` から参照される |
 | `workflows.<name>.loras` | LoRA キー名とファイル名・強度のマッピング |
 | `wd14_tagger.model_name` | WD Timm Tagger で使用するモデル名 |
 | `wd14_tagger.general_threshold` | 一般タグの出力しきい値（0.0〜1.0） |
@@ -213,6 +224,11 @@ print(tags)
 "workflows": {
   "<workflow_name>": {
     "default_image_size": {"width": 1024, "height": 1024},
+    "image_size": {
+      "vertical":   {"width": 832,  "height": 1216},
+      "horizontal": {"width": 1216, "height": 832},
+      "square":     {"width": 1024, "height": 1024}
+    },
     "loras": {
       "my_lora": {"file": "my_lora.safetensors", "strength": 0.8}
     }

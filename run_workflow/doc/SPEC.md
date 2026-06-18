@@ -11,11 +11,11 @@ WebSocket で進捗をリアルタイム監視し、結果を `result.json` に�
 run_workflow/
   run_workflow.py         # メインスクリプト（WorkflowRunner・エントリポイント）
   config.json             # 接続設定・デフォルトワークフロー・ワークフロー別設定
-  requirements.txt
   modules/
     load_files.py         # 設定・入力ファイルの読み込みと検証
     workflow_builder.py   # テンプレート選択・書き換え
     comfyui_client.py     # ComfyUI REST API / WebSocket クライアント
+    wd14_tagger_runner.py # WD Timm Tagger ワークフロー実行
   templates/
     <workflow_name>/      # ワークフロー名ごとのサブディレクトリ
       template_lora_0.json  # LoRA 0個用
@@ -23,14 +23,18 @@ run_workflow/
       template_lora_2.json  # LoRA 2個用
       template_lora_3.json  # LoRA 3個用
       template_lora_4.json  # LoRA 4個用
+    template_wd14_tagger.json  # WD Timm Tagger ワークフローテンプレート
   test/
     test_helper.py
     test_run_workflow.py
     test_load_files.py
     test_workflow_builder.py
     test_comfyui_client.py
+    test_wd14_tagger_runner.py
   doc/
     SPEC.md
+    SPEC/
+      wd14_tagger.md
 ```
 
 ## 設定ファイル
@@ -147,7 +151,8 @@ python run_workflow.py --input input.json --workflow sdxl --output result.json
 |---|---|
 | `WorkflowRunner` | `WorkflowBuilder`・`ComfyUIClient` を束ねてワークフロー実行を制御するファサード。コンストラクタでワークフロー名を受け取る。`get_image_size(orientation)` で向きに対応する画像サイズを返す |
 | `WorkflowBuilder` | テンプレート選択・読み込み・プロンプト/LoRA/画像サイズ/seed の書き換え。ワークフロー名に対応するサブディレクトリからテンプレートを選択する |
-| `ComfyUIClient` | ComfyUI REST API 呼び出し・WebSocket 監視 |
+| `ComfyUIClient` | ComfyUI REST API 呼び出し・WebSocket 監視・画像アップロード・履歴取得 |
+| `Wd14TaggerRunner` | WD Timm Tagger ワークフローを実行し、画像のタグ文字列を返す。詳細は [SPEC/wd14_tagger.md](./SPEC/wd14_tagger.md) を参照 |
 | `load_files` | `config.json` と入力 JSON の読み込み・検証 (`load_config`, `load_and_validate_input`, `validate_inputs`) |
 
 ### 実装上の制約
