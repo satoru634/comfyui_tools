@@ -49,6 +49,11 @@ def make_bot_for_test(
 ) -> ImageBot:
     if output_dir is not None:
         config = {**config, "comfyui_output_dir": str(output_dir)}
+    # MagicMock の runner に JSON シリアライズ可能なデフォルト属性を設定する
+    if isinstance(runner, MagicMock):
+        runner.prompt_id = None
+        runner.template_path = None
+        runner.parameters = {}
     with patch.object(discord.Client, "__init__", return_value=None):
         bot = ImageBot(config, runner, wd14_runner or MagicMock())
     # discord.Client.user は _connection.user を参照するため両方設定する

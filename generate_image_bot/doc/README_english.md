@@ -214,7 +214,6 @@ Date-based subdirectories are created under `log/YYYYMMDD/`, containing three ty
   "timestamp": "2026-04-25T12:34:56",
   "user_id": 123456789,
   "username": "discord_username",
-  "workflow": "anima",
   "loras": ["my_lora"],
   "positive": "masterpiece, 1girl",
   "negative": "worst quality",
@@ -222,7 +221,17 @@ Date-based subdirectories are created under `log/YYYYMMDD/`, containing three ty
   "outputs": [
     {"filename": "ComfyUI_00001_.png", "subfolder": "", "type": "output"}
   ],
-  "error": null
+  "error": null,
+  "run_workflow": {
+    "prompt_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "template": "templates/anima_1lora.json",
+    "parameters": {
+      "positive": "masterpiece, 1girl",
+      "negative": "worst quality",
+      "loras": [{"name": "my_lora", "file": "my_lora.safetensors", "strength": 0.8}],
+      "image_size": {"width": 832, "height": 1216}
+    }
+  }
 }
 ```
 

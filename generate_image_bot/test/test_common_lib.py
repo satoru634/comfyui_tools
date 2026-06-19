@@ -75,6 +75,38 @@ class TestWriteLog:
         data = json.loads(list(log_dir.glob("*/*.json"))[0].read_text(encoding="utf-8"))
         assert data["image_orientation"] is None
 
+    def test_run_workflow_included_when_provided(self, tmp_path):
+        log_dir = tmp_path / "log"
+        run_workflow = {
+            "prompt_id": "abc-123",
+            "template": "templates/flux_2lora.json",
+            "parameters": {
+                "positive": "1girl",
+                "loras": [],
+                "image_size": {"width": 512, "height": 512},
+            },
+        }
+        write_log(
+            log_dir,
+            123,
+            "user1",
+            _LOG_PARSED,
+            "success",
+            [],
+            None,
+            run_workflow=run_workflow,
+        )
+        data = json.loads(list(log_dir.glob("*/*.json"))[0].read_text(encoding="utf-8"))
+        assert data["run_workflow"]["prompt_id"] == "abc-123"
+        assert data["run_workflow"]["template"] == "templates/flux_2lora.json"
+        assert data["run_workflow"]["parameters"]["positive"] == "1girl"
+
+    def test_run_workflow_null_when_omitted(self, tmp_path):
+        log_dir = tmp_path / "log"
+        write_log(log_dir, 123, "user1", _LOG_PARSED, "success", [], None)
+        data = json.loads(list(log_dir.glob("*/*.json"))[0].read_text(encoding="utf-8"))
+        assert data["run_workflow"] is None
+
 
 # ── write_system_log ──────────────────────────────────────────────────────────
 

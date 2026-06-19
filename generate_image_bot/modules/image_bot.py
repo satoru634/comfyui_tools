@@ -42,6 +42,18 @@ from modules.wd14_tagger_runner import Wd14TaggerRunner  # noqa: E402
 sys.modules.update(_bot_modules)
 del _bot_modules
 
+# ── run_workflow ログヘルパー ──────────────────────────────────────────────────
+
+
+def _build_run_workflow_info(runner) -> dict:
+    """WorkflowRunner の実行結果情報をログ用 dict に変換する。"""
+    return {
+        "prompt_id": runner.prompt_id,
+        "template": runner.template_path,
+        "parameters": runner.parameters,
+    }
+
+
 # ── 画像検証ヘルパー ───────────────────────────────────────────────────────────
 
 
@@ -398,11 +410,29 @@ class ImageBot(discord.Client):
                 runner.execute, parsed["loras"], prompts, image_size
             )
         except ValueError as e:
-            write_log(self._log_dir, user_id, username, parsed, "error", [], str(e))
+            write_log(
+                self._log_dir,
+                user_id,
+                username,
+                parsed,
+                "error",
+                [],
+                str(e),
+                run_workflow=_build_run_workflow_info(runner),
+            )
             await self._reply_error(message, self._fmt("execution_error", error=str(e)))
             return
         except Exception as e:
-            write_log(self._log_dir, user_id, username, parsed, "error", [], str(e))
+            write_log(
+                self._log_dir,
+                user_id,
+                username,
+                parsed,
+                "error",
+                [],
+                str(e),
+                run_workflow=_build_run_workflow_info(runner),
+            )
             await self._reply_error(message, self._fmt("unexpected_error"))
             return
 
@@ -411,12 +441,28 @@ class ImageBot(discord.Client):
             file_paths = self._resolve_output_paths(outputs)
         except ValueError as e:
             write_log(
-                self._log_dir, user_id, username, parsed, "error", outputs, str(e)
+                self._log_dir,
+                user_id,
+                username,
+                parsed,
+                "error",
+                outputs,
+                str(e),
+                run_workflow=_build_run_workflow_info(runner),
             )
             await self._reply_error(message, str(e))
             return
 
-        write_log(self._log_dir, user_id, username, parsed, "success", outputs, None)
+        write_log(
+            self._log_dir,
+            user_id,
+            username,
+            parsed,
+            "success",
+            outputs,
+            None,
+            run_workflow=_build_run_workflow_info(runner),
+        )
         try:
             await message.channel.send(
                 files=[discord.File(str(p)) for p in file_paths], reference=message

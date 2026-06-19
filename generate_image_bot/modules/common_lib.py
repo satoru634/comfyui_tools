@@ -21,6 +21,7 @@ def write_log(
     status: str,
     outputs: list,
     error: str | None,
+    run_workflow: dict | None = None,
 ) -> None:
     """生成試行の結果を log_dir/YYYYMMDD/result_hhmmss_ffffff.json として書き出す。"""
     ts = datetime.now()
@@ -37,6 +38,7 @@ def write_log(
         "image_orientation": parsed.get("image_orientation"),
         "outputs": outputs,
         "error": error,
+        "run_workflow": run_workflow,
     }
     with open(daily / filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
