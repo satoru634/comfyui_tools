@@ -1,8 +1,13 @@
 """WD Timm Tagger ワークフローの実行を担うクラス。単独でも import 経由でも利用できる。"""
 
 import json
+import sys
 import uuid
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from common_libs.common_lib import loc
+
 
 from modules.comfyui_client import ComfyUIClient
 from modules.load_files import (
@@ -63,5 +68,5 @@ class Wd14TaggerRunner:
         preview_id = self._title_to_id[self._PREVIEW_TITLE]
         text_list = history.get("outputs", {}).get(preview_id, {}).get("text")
         if not text_list:
-            raise ValueError("WD Timm Tagger の出力が取得できませんでした")
+            raise ValueError(f"{loc()} WD Timm Tagger の出力が取得できませんでした")
         return text_list[0]

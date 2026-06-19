@@ -1,7 +1,11 @@
 import copy
 import json
 import random
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from common_libs.common_lib import loc
 
 
 class WorkflowBuilder:
@@ -12,17 +16,17 @@ class WorkflowBuilder:
         """ワークフロー名と LoRA 数に応じたテンプレートを選択する"""
         if not 0 <= lora_count <= 4:
             raise ValueError(
-                f"LoRA は 0〜4 個の範囲で指定してください（指定数: {lora_count}）"
+                f"{loc()} LoRA は 0〜4 個の範囲で指定してください（指定数: {lora_count}）"
             )
         workflow_dir = self.templates_dir / workflow_name
         if not workflow_dir.exists():
             raise ValueError(
-                f"テンプレートディレクトリが見つかりません: {workflow_name}"
+                f"{loc()} テンプレートディレクトリが見つかりません: {workflow_name}"
             )
         path = workflow_dir / f"template_lora_{lora_count}.json"
         if not path.exists():
             raise ValueError(
-                f"テンプレートファイルが見つかりません: {workflow_name}/template_lora_{lora_count}.json"
+                f"{loc()} テンプレートファイルが見つかりません: {workflow_name}/template_lora_{lora_count}.json"
             )
         return str(path)
 
@@ -33,9 +37,11 @@ class WorkflowBuilder:
             with open(template_path, encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
-            raise ValueError(f"テンプレートファイルが見つかりません: {name}")
+            raise ValueError(f"{loc()} テンプレートファイルが見つかりません: {name}")
         except json.JSONDecodeError as e:
-            raise ValueError(f"テンプレート JSON の解析に失敗しました ({name}): {e}")
+            raise ValueError(
+                f"{loc()} テンプレート JSON の解析に失敗しました ({name}): {e}"
+            )
 
     def apply(
         self,
@@ -70,14 +76,16 @@ class WorkflowBuilder:
             ("negative_prompt", "negative"),
         ):
             if key not in title_map:
-                raise ValueError(f"テンプレートにノード '{key}' が見つかりません")
+                raise ValueError(
+                    f"{loc()} テンプレートにノード '{key}' が見つかりません"
+                )
             title_map[key]["inputs"]["text"] = prompts[field]
 
     def _apply_image_size(self, title_map: dict, image_size: dict) -> None:
         """テンプレートの画像サイズノードに、ユーザーから受け取った画像サイズを適用する"""
         key = "empty_latent_image"
         if key not in title_map:
-            raise ValueError(f"テンプレートにノード '{key}' が見つかりません")
+            raise ValueError(f"{loc()} テンプレートにノード '{key}' が見つかりません")
         title_map[key]["inputs"]["width"] = image_size["width"]
         title_map[key]["inputs"]["height"] = image_size["height"]
 
@@ -86,7 +94,9 @@ class WorkflowBuilder:
         for i, lora in enumerate(resolved_loras, start=1):
             key = f"lora_loader_{i}"
             if key not in title_map:
-                raise ValueError(f"テンプレートにノード '{key}' が見つかりません")
+                raise ValueError(
+                    f"{loc()} テンプレートにノード '{key}' が見つかりません"
+                )
             title_map[key]["inputs"]["lora_name"] = lora["file"]
             title_map[key]["inputs"]["strength_model"] = lora["strength"]
 

@@ -1,5 +1,11 @@
-import json
 import asyncio
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from common_libs.common_lib import loc
+
 import requests
 import websockets
 
@@ -19,11 +25,13 @@ class ComfyUIClient:
             response.raise_for_status()
             return response.json()["prompt_id"]
         except requests.ConnectionError:
-            raise ValueError(f"ComfyUI に接続できません: {self.url}")
+            raise ValueError(f"{loc()} ComfyUI に接続できません: {self.url}")
         except requests.Timeout:
-            raise ValueError(f"ComfyUI への接続がタイムアウトしました: {self.url}")
+            raise ValueError(
+                f"{loc()} ComfyUI への接続がタイムアウトしました: {self.url}"
+            )
         except requests.HTTPError as e:
-            raise ValueError(f"ComfyUI がエラーを返しました: {e}")
+            raise ValueError(f"{loc()} ComfyUI がエラーを返しました: {e}")
 
     def monitor(self, prompt_id: str, client_id: str) -> None:
         """ComfyUI の WebSocket を監視して、ワークフローの完了を待つ"""
@@ -43,11 +51,13 @@ class ComfyUIClient:
             response.raise_for_status()
             return response.json()["name"]
         except requests.ConnectionError:
-            raise ValueError(f"ComfyUI に接続できません: {self.url}")
+            raise ValueError(f"{loc()} ComfyUI に接続できません: {self.url}")
         except requests.Timeout:
-            raise ValueError(f"ComfyUI への接続がタイムアウトしました: {self.url}")
+            raise ValueError(
+                f"{loc()} ComfyUI への接続がタイムアウトしました: {self.url}"
+            )
         except requests.HTTPError as e:
-            raise ValueError(f"ComfyUI がエラーを返しました: {e}")
+            raise ValueError(f"{loc()} ComfyUI がエラーを返しました: {e}")
 
     def get_history(self, prompt_id: str) -> dict:
         """ComfyUI の履歴から指定された prompt_id のデータを返す"""
@@ -56,11 +66,13 @@ class ComfyUIClient:
             response.raise_for_status()
             return response.json().get(prompt_id, {})
         except requests.ConnectionError:
-            raise ValueError(f"ComfyUI に接続できません: {self.url}")
+            raise ValueError(f"{loc()} ComfyUI に接続できません: {self.url}")
         except requests.Timeout:
-            raise ValueError(f"ComfyUI への接続がタイムアウトしました: {self.url}")
+            raise ValueError(
+                f"{loc()} ComfyUI への接続がタイムアウトしました: {self.url}"
+            )
         except requests.HTTPError as e:
-            raise ValueError(f"ComfyUI がエラーを返しました: {e}")
+            raise ValueError(f"{loc()} ComfyUI がエラーを返しました: {e}")
 
     def get_outputs(self, prompt_id: str) -> list[dict]:
         """ComfyUI の履歴から指定された prompt_id の出力を取得する"""
@@ -74,11 +86,13 @@ class ComfyUIClient:
                     outputs.append(image)
             return outputs
         except requests.ConnectionError:
-            raise ValueError(f"ComfyUI に接続できません: {self.url}")
+            raise ValueError(f"{loc()} ComfyUI に接続できません: {self.url}")
         except requests.Timeout:
-            raise ValueError(f"ComfyUI への接続がタイムアウトしました: {self.url}")
+            raise ValueError(
+                f"{loc()} ComfyUI への接続がタイムアウトしました: {self.url}"
+            )
         except requests.HTTPError as e:
-            raise ValueError(f"ComfyUI がエラーを返しました: {e}")
+            raise ValueError(f"{loc()} ComfyUI がエラーを返しました: {e}")
 
     def _is_completed(self, prompt_id: str) -> bool:
         """history API でワークフローの完了を確認する"""
@@ -119,14 +133,14 @@ class ComfyUIClient:
                         return
                     if msg_type == "execution_error":
                         raise ValueError(
-                            f"ComfyUI 実行エラー: {msg_data.get('exception_message', '不明なエラー')}"
+                            f"{loc()} ComfyUI 実行エラー: {msg_data.get('exception_message', '不明なエラー')}"
                         )
                     # node が None の executing メッセージは古い ComfyUI の完了シグナル。
                     # history 書き込みとの競合を避けるためポーリングに切り替える
                     if msg_type == "executing" and msg_data.get("node") is None:
                         break
         except (OSError, websockets.exceptions.WebSocketException) as e:
-            raise ValueError(f"WebSocket 接続エラー: {e}")
+            raise ValueError(f"{loc()} WebSocket 接続エラー: {e}")
 
         # WebSocket 切断または executing{node:null} 受信後、history に書き込まれるまでポーリングする
         await self._poll_until_completed(prompt_id, _poll_timeout)
@@ -137,4 +151,4 @@ class ComfyUIClient:
             if self._is_completed(prompt_id):
                 return
             await asyncio.sleep(1)
-        raise ValueError("ComfyUI の完了待機がタイムアウトしました")
+        raise ValueError(f"{loc()} ComfyUI の完了待機がタイムアウトしました")

@@ -7,6 +7,10 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common_libs.common_lib import loc
+
+
 from modules.comfyui_client import ComfyUIClient
 from modules.workflow_builder import WorkflowBuilder
 from modules.load_files import (
@@ -49,7 +53,9 @@ def resolve_loras(lora_names: list[str], lora_list: dict) -> list[dict]:
     resolved = []
     for name in lora_names:
         if name not in lora_list:
-            raise ValueError(f"LoRA '{name}' が config.json の loras 設定に存在しません")
+            raise ValueError(
+                f"{loc()} LoRA '{name}' が config.json の loras 設定に存在しません"
+            )
         entry = lora_list[name]
         resolved.append(
             {"name": name, "file": entry["file"], "strength": entry["strength"]}
@@ -77,7 +83,7 @@ class WorkflowRunner:
         )
         if self._workflow_name not in self.config["workflows"]:
             raise ValueError(
-                f"ワークフロー '{self._workflow_name}' が config.json の workflows に存在しません"
+                f"{loc()} ワークフロー '{self._workflow_name}' が config.json の workflows に存在しません"
             )
         self._workflow_config = self.config["workflows"][self._workflow_name]
 

@@ -1,10 +1,16 @@
 """Discord ボット: ユーザーメッセージのパースロジックを提供するモジュール"""
 
 import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from common_libs.common_lib import loc
 
 from modules.const import (
     VALID_ORIENTATIONS,
 )
+
 
 # ── メッセージパース ───────────────────────────────────────────────────────────
 
@@ -33,7 +39,7 @@ class MessageParser:
             orientation = sections["image_orientation"].lower()
             if orientation not in VALID_ORIENTATIONS:
                 raise ValueError(
-                    f"'image_orientation' は 'vertical'、'horizontal'、'square' で指定してください"
+                    f"{loc()} 'image_orientation' は 'vertical'、'horizontal'、'square' で指定してください"
                     f"（指定値: {sections['image_orientation']!r}）"
                 )
             result["image_orientation"] = orientation
@@ -71,7 +77,7 @@ class MessageParser:
         """positive / negative が両方存在することを確認する。"""
         for key in ("positive", "negative"):
             if key not in sections:
-                raise ValueError(f"'{key}' キーが見つかりません")
+                raise ValueError(f"{loc()} '{key}' キーが見つかりません")
 
     def _parse_loras(self, loras_str: str) -> list:
         """カンマ区切りの LoRA 名文字列をリストに変換する。空文字列は空リストを返す。"""

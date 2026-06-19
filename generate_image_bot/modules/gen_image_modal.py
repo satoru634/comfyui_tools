@@ -1,6 +1,11 @@
 """Discord ボット: 画像生成コマンドのモーダル"""
 
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from common_libs.common_lib import loc
 
 import discord
 
@@ -8,6 +13,7 @@ from modules.const import (
     MAX_PROMPT_LENGTH,
     VALID_ORIENTATIONS,
 )
+
 
 if TYPE_CHECKING:
     import modules.image_bot
@@ -88,7 +94,7 @@ class GenImageModal(discord.ui.Modal, title="画像生成"):
         orientation = orientation_raw.lower() if orientation_raw else None
         if orientation is not None and orientation not in VALID_ORIENTATIONS:
             raise ValueError(
-                f"'image_orientation' は 'vertical'、'horizontal'、'square' で指定してください"
+                f"{loc()} 'image_orientation' は 'vertical'、'horizontal'、'square' で指定してください"
                 f"（指定値: {orientation_raw!r}）"
             )
         return {

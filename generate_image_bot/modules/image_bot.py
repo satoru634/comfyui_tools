@@ -9,6 +9,10 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from common_libs.common_lib import loc
+
+
 import discord
 from PIL import Image as PILImage
 
@@ -488,13 +492,19 @@ class ImageBot(discord.Client):
             ).resolve()
             # resolve() 後に output_dir 配下に収まるか確認してパストラバーサルを防ぐ
             if not path.is_relative_to(self._output_dir):
-                raise ValueError(f"出力ファイルのパスが不正です: {item['filename']}")
+                raise ValueError(
+                    f"{loc()} 出力ファイルのパスが不正です: {item['filename']}"
+                )
             if not path.exists():
-                raise ValueError(f"出力ファイルが見つかりません: {item['filename']}")
+                raise ValueError(
+                    f"{loc()} 出力ファイルが見つかりません: {item['filename']}"
+                )
             size = path.stat().st_size
             if size >= MAX_FILE_SIZE:
                 size_mb = size / (1024 * 1024)
-                raise ValueError(self._fmt("file_too_large", size_mb=f"{size_mb:.1f}"))
+                raise ValueError(
+                    f"{loc()} {self._fmt('file_too_large', size_mb=f'{size_mb:.1f}')}"
+                )
             paths.append(path)
         return paths
 
