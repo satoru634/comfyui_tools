@@ -197,6 +197,8 @@ masterpiece, 1girl, solo, long hair, blue eyes, white dress, smile, ...
 
 下記から該当するメッセージを探して対処してください。
 
+> **デバッグ情報について:** エラーの詳細部分に `[load_files.py:L61]` のようなファイル名と行番号が含まれる場合があります。これは開発者向けのデバッグ情報です。管理者に問い合わせる際にこの情報も伝えると、原因の特定が早くなります。
+
 ---
 
 ### DM からは使用できません。サーバーのチャンネルで実行してください。
@@ -276,7 +278,7 @@ negative: worst quality
 
 ---
 
-### ❌ 生成に失敗しました: LoRA '〇〇' が lora_list.json に存在しません
+### ❌ 生成に失敗しました: LoRA '〇〇' が config.json の loras 設定に存在しません
 
 **こんなとき：** 指定した LoRA 名が登録されていない場合
 
@@ -409,5 +411,36 @@ negative: worst quality
 
 ### 管理者向け情報
 
-- 生成結果は `generate_image_bot/log/` フォルダに JSON 形式で記録されています。
+- 生成結果は `generate_image_bot/log/YYYYMMDD/` フォルダに JSON 形式で記録されています。
 - 設定ファイル（`config.json`）で停止時刻を設定できます（`"shutdown_time": "03:00"` など）。停止時刻になると処理中のリクエストを完了してからボットが自動終了します。
+
+**生成ログ（`result_*.json`）の構造:**
+
+```json
+{
+  "status": "success",
+  "timestamp": "2026-01-01T12:00:00",
+  "user_id": 123456789,
+  "username": "discord_username",
+  "loras": ["my_lora"],
+  "positive": "masterpiece, 1girl",
+  "negative": "worst quality",
+  "image_orientation": "vertical",
+  "outputs": [
+    {"filename": "ComfyUI_00001_.png", "subfolder": "", "type": "output"}
+  ],
+  "error": null,
+  "run_workflow": {
+    "prompt_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "template": "templates/anima_1lora.json",
+    "parameters": {
+      "positive": "masterpiece, 1girl",
+      "negative": "worst quality",
+      "loras": [{"name": "my_lora", "file": "my_lora.safetensors", "strength": 0.8}],
+      "image_size": {"width": 832, "height": 1216}
+    }
+  }
+}
+```
+
+`run_workflow` フィールドにはワークフロー実行の詳細が記録されます。エラー発生時は `prompt_id` / `template` が `null`、`parameters` が `{}` になります。
