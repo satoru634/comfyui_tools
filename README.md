@@ -41,18 +41,6 @@ source .venv/bin/activate
 | [`generate_image_bot/`](generate_image_bot/README.md) | Discord のメンションで ComfyUI に画像生成を指示し、生成された画像を返送する Discord ボット |
 | [`captioning_tool/`](captioning_tool/README.md) | ディレクトリ内の画像を WD Timm Tagger で一括タグ付けし、`.txt` キャプションファイルを生成するツール |
 
-## ⚙️ サブモジュール
-
-| サブモジュール | リポジトリ | 説明 |
-|---|---|---|
-| [`sd_scripts/`](sd_scripts/) | [kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts) | Stable Diffusion 系モデルのファインチューニング・LoRA 学習スクリプト集 |
-
-初回クローン時はサブモジュールの初期化が必要です。
-
-```bash
-git submodule update --init
-```
-
 ## 🪪 ライセンス
 
 [MIT](LICENSE)
